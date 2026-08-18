@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "notion": {
+      "type": "http",
+      "url": "https://mcp.notion.com/mcp"
+    }
+  },
+  "claudecode": {
+    "mcpServers": {
+      "notion": null // Claude ではクラウドアカウントのコネクタを優先するためローカルからは除外
+    }
+  }
+}

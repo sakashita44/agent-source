@@ -1,0 +1,8 @@
+# Temporary files
+tmp/
+.agent-source-mcp.state
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
