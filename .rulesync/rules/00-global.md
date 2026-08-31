@@ -23,8 +23,8 @@ targets:
 
 - 設計、実装、コードレビュー、技術的な提案では `engineering-principles` を必ず適用する
 - 情報と意図を成果物へ配置するときは `artifact-principles` を必ず適用する
-- 文書、Issue、PR description、技術メモ、コードコメント、コミットメッセージなど残存する文章を書くときは `writing-principles` を必ず適用する
-- 変更の検証と完了判定では `verification-principles` を必ず適用する
+- 文書、Issue、PR description、技術メモ、コードコメント、コミットメッセージなど残存する文章を執筆、編集、レビューするときは `writing-principles` を必ず適用する
+- 変更、既存成果物、文書、手順、コードの検証と完了判定では `verification-principles` を必ず適用する
 - Gitを読む、操作する、またはGit操作を提案するときは `git-general` を必ず適用する
 - サブエージェントへ委譲するときは `subagent` を必ず適用する
 

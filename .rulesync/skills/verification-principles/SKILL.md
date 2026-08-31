@@ -1,12 +1,15 @@
 ---
 name: verification-principles
 description: >-
-  Use when selecting verification for a change, evaluating evidence from
-  checks, or deciding whether implementation work is complete.
+  Use when selecting or reviewing verification for a change or artifact,
+  evaluating evidence or diagnostics, auditing procedures, or deciding whether
+  work is complete.
 ---
 # Verification Principles
 
 ## 検証の選択
+
+検証前に、判定基準、その適用範囲、正本を特定する。正本と検証手順または補助資料が食い違う場合は、正本に従って判定し、差異を報告する。
 
 変更によって起こり得る失敗を先に特定し、その失敗を観測できる検証を選ぶ。変更の影響範囲、失敗時の損失、復旧の難しさに応じて検証の強度を調整する。
 
@@ -14,6 +17,12 @@ description: >-
 
 ## 証拠の扱い
 
+差分だけで成立性を判断せず、変更後の成果物全体と、責務、導線、依存関係の判断に必要な関連成果物を確認する。
+
 静的な診断と実行環境での検証を区別する。実行していない検証や観測していない結果を成功としない。
+
+lint、静的解析、機械的なパターン検出の出力は調査材料として扱い、対象の意味と適用条件を確認してから欠陥と判定する。
+
+文書と手順の十分性は、前提知識で補完しない読み手が記述だけで遂行できるかで判定する。検証対象の欠陥と、環境、権限、依存関係に起因する失敗を区別する。
 
 実環境への影響を避ける必要がある場合は、dry-runまたは隔離した作業環境を用いる。検証後は、実行した内容と結果、未検証事項、残るリスクを報告する。
