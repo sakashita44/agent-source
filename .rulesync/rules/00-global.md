@@ -5,64 +5,38 @@ targets:
 ---
 # Global Agent Instructions
 
-## General Workflow
+## 作業方針
 
-Before starting any task, briefly state what you intend to do so the user can assess the direction and interrupt (Esc) if needed. Do not jump into investigation or implementation without first showing your approach.
+作業前に、規模とリスクに応じた粒度で実行計画を示す。軽微な作業は一文で示し、複数の工程や判断、復元方法の検討を伴う作業は、ユーザーが判断しやすい構造化された形式で示す。
 
-- Trivial tasks (typo fix, single-line change, etc.): state the plan inline and proceed. No explicit approval needed.
-- Non-trivial tasks: present a plan and get user approval before implementing.
-- Unexpected failures (MCP errors, missing files, broken assumptions, etc.): stop, report the situation, and ask for direction before attempting additional investigation.
+安全かつ依頼範囲内の読み取り、調査、通常の実装は、計画を示した後に自律的に進める。不可逆な操作、外部への影響、追加権限、重大な設計判断、依頼の前提変更が必要な場合に限り、実行前に確認する。
 
-1. Plan: analyze the request and the codebase. Outline the necessary changes.
-2. Review: check if the plan introduces technical debt. If so, revise to include refactoring.
-3. Execute: implement the solution following the guidelines below.
+想定外の失敗が発生した場合は、代替手段を連続して試す前に、エラー、環境、依頼の前提を確認して根本原因を絞る。安全な読み取りだけで行える診断は自律的に進める。前提が崩れた場合、調査経路が大きく分岐する場合、または根本原因を特定できないまま回避策が必要になる場合は、状況と仮説を報告して方針を確認する。
 
-Investigation — repo structure, existing implementations, environment and tooling state — goes to subagents by default; the main context keeps judgment, review, and integration.
+変更を伴う処理を提案するときは、対象を復元できる状態か確認する。Gitなどで復元手段が確保されている場合は、追加の確認やバックアップを求めない。復元手段がない場合は、バックアップ、dry-run、隔離環境などを提案に含め、必要な判断を実行前にユーザーへ求める。
 
-## Skill Routing
+必要なツール、ランタイム、コマンドを利用できない場合は、独断でインストール、更新、または環境変更を行わず、不足しているもの、必要な理由、対応候補を示してユーザーに確認する。プロジェクトが宣言する通常の依存関係の導入と、システムへの新規導入または変更を区別する。
 
-- Markdown docs, PR descriptions, ADRs: write or edit only via the write-docs skill. It is the canonical source of the Documentation Style rules.
-- Commits: only via the commit skill, and only when the user asks. Never commit on your own initiative.
-- PR merge and branch cleanup: only via the pr-merge skill. Releases (CHANGELOG promotion, tagging): only via the release skill.
-- grill-me (requirements interview) and verify-code / verify-docs / verify-manual (quality rubrics) are not model-invocable. Propose them to the user when the work calls for one.
+## Skillの利用
 
-## Git
+利用可能なSkillを積極的に確認し、依頼に適合するものを使用する。
 
-- Use merge commit when merging PRs; never squash or rebase.
-- Conventional commit prefixes apply to commits and PR titles. `fix:` is strictly for user-facing bug fixes; dev environment changes are `chore:`. Messages and titles state why the change was made, not what changed.
-- Branch naming: `<branch_type>/<yyyymm>/sakashita44/<issue_num>-<content>`. The `<issue_num>-` prefix is optional when there is no associated issue.
-- Every PR includes updates to affected documentation, or states in the PR description why none are needed.
-- CHANGELOG follows [Keep a Changelog](https://keepachangelog.com/) and [Semantic Versioning](https://semver.org/); maintenance rules are implemented in the pr-merge and release skills.
+- 設計、実装、コードレビュー、技術的な提案では `engineering-principles` を必ず適用する
+- 情報と意図を成果物へ配置するときは `artifact-principles` を必ず適用する
+- 文書、Issue、PR description、技術メモ、コードコメント、コミットメッセージなど残存する文章を書くときは `writing-principles` を必ず適用する
+- 変更の検証と完了判定では `verification-principles` を必ず適用する
+- Gitを読む、操作する、またはGit操作を提案するときは `git-general` を必ず適用する
+- サブエージェントへ委譲するときは `subagent` を必ず適用する
 
-## Testing & Verification
+## サブエージェント
 
-- Test plans are not required for PRs (personal project context).
-- Prefer existing automation (e.g., pre-commit hooks) over manually running linters or tools. Do not re-run tools that pre-commit already covers.
+サブエージェントを積極的に利用する。
+利用シーンは以下の通り。
 
-## Implementation Guidelines
+- 調査：コードベースやweb検索に利用する。簡単な調査でも、独立して切り出すことでコンテキスト分離による判断の精度向上が期待できる。
+- 実装：方向性が決まった編集を主な委譲対象とする。メインコンテキストは判断、レビュー、統合を担う。
+- 相談：ゼロコンテキストの外部エージェントに相談することで、バイアスのない意見を得る。
 
-- Decision priority: trivial decisions follow prevailing conventions; critical infrastructure follows established standards; domain-specific problems get purpose-built designs — spend original thinking there.
-- Library First: evaluate well-maintained libraries before implementing standard functionality (validation, ID generation, UI patterns, etc.).
-- Language: when a task calls for JavaScript, use TypeScript unless there is a specific reason not to. Otherwise choose the language that fits the problem domain and ecosystem.
-- Before writing code, read the target files and related modules; do not patch a line without understanding the surrounding architecture. If the existing code is messy or violates SOLID, propose a refactoring plan first — do not build features on rotten code.
-- Code quality target: readable names, single-responsibility functions, strict typing, DRY. Verification rubric: verify-code skill.
-- Follow the project's naming conventions, directory structure, and typing patterns; if the project lacks a clear pattern, establish a clean one.
-- Where each intent belongs: code expresses _How_ (the implementation itself); test code expresses _What_ (the expected behavior/spec); commit logs express _Why_ (the reason for the change); code comments express _Why not_ (rejected alternatives, non-obvious constraints, pitfalls avoided). Do not write comments that merely restate _How_ — the code already says that.
-- Where each planning intent lives: specs/concept docs express _intended What/Why_ (the purpose of something not yet built); issues express the _fluid path_ (how to build it, the in-flight decomposition, task order); fixed `docs/` express _as-built current fact_ (the settled result); decision records / ADRs express _durable decision Why_ (the rationale). Do not pin the implementation path, task decomposition, type/function names, or concrete parameter values into fixed docs — keep them in issues and land them in docs as as-built once implementation settles.
-- Express intent, not implementation vocabulary: plans and specs state what an element is meant to _do_. Defer binding implementation vocabulary (type names, function names, concrete constants) to the lowest layer (issue → code); never let it compress or hide the intent in durable docs or upstream planning.
+## 言語
 
-## Environment Notes
-
-- `node` and `uv` are available after `D:\UserData\Workspace\tools\Set-Env.ps1` is run.
-- Shell: If running in Claude Code, it runs in Git Bash (`/usr/bin/bash`).
-- Path: Windows paths (`D:\...`) are usable. Do not use `cd /d` (cmd.exe-specific); use plain `cd` in bash.
-- Subagents: prefer the `agy` command (Google Antigravity) as the delegation target, including where a skill's procedure delegates. Fall back to the built-in Agent tool with a Sonnet-class model when `agy` is unavailable or when the work needs what the Agent tool provides (read-only Explore, background task tracking, session-local tool access).
-  - Run non-interactively with `-p "<prompt>"`. Print mode waits 5 minutes by default; extend with `--print-timeout`.
-  - Select the model with `--model`, using a Pro-class id such as `gemini-3.1-pro-high`. `agy models` lists the valid ids; avoid Flash models.
-  - Reach paths outside the current workspace with `--add-dir <path>`. Headless mode auto-denies file access it cannot prompt for.
-  - When instructing agy, include a prompt that prevents the turn from ending with only a request for approval or only a declaration that work has started (depending on the case, agy also needs the `--dangerously-skip-permissions`). If agy fails, retry up to two times with a revised prompt.
-
-## Other Notes
-
-- Use Japanese for comments, documentation, pull requests, and commit messages.
-- Write Japanese prose in plain form (常体), stating facts; the full register and style rules are in the write-docs skill.
+コメント、文書、Issue、PR、コミットメッセージには日本語を用いる。文章の詳細な原則は該当するSkillに従う。
