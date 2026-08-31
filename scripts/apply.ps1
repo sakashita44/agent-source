@@ -12,7 +12,7 @@ function Assert-CommandExists {
     param([Parameter(Mandatory = $true)][string]$Name)
 
     if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
-        throw "必要なコマンド '$Name' が見つからない。インストールまたは更新は自動実行しない。"
+        throw "Required command '$Name' was not found. This script does not install or update dependencies."
     }
 }
 
@@ -34,7 +34,7 @@ function Resolve-RulesyncCommand {
         }
     }
 
-    throw '既存の Rulesync 実行ファイルが PATH または node_modules/.bin に見つからない。Rulesync の取得や更新は自動実行しない。'
+    throw 'No Rulesync executable was found on PATH or in node_modules/.bin. This script does not install or update Rulesync.'
 }
 
 function Invoke-Rulesync {
@@ -45,7 +45,7 @@ function Invoke-Rulesync {
 
     & $Command @Arguments
     if ($LASTEXITCODE -ne 0) {
-        throw "Rulesync が終了コード $LASTEXITCODE を返した: $($Arguments -join ' ')"
+        throw "Rulesync exited with code ${LASTEXITCODE}: $($Arguments -join ' ')"
     }
 }
 
@@ -59,7 +59,7 @@ function Assert-DescendantPath {
     $childFullPath = [System.IO.Path]::GetFullPath($ChildPath).TrimEnd('\', '/')
     $prefix = $parentFullPath + [System.IO.Path]::DirectorySeparatorChar
     if (-not $childFullPath.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
-        throw "安全境界外のパスを拒否した: $childFullPath"
+        throw "Path is outside the allowed root: $childFullPath"
     }
 }
 
@@ -77,7 +77,7 @@ function Assert-NoReparsePointInPath {
         if (Test-Path -LiteralPath $currentPath) {
             $item = Get-Item -LiteralPath $currentPath -Force
             if ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
-                throw "再解析ポイントを含むパスを拒否した: $currentPath"
+                throw "Path contains a reparse point: $currentPath"
             }
         }
         $currentPath = Split-Path -Parent $currentPath
@@ -91,7 +91,7 @@ function Assert-NoNestedReparsePoint {
         Where-Object { $_.Attributes -band [System.IO.FileAttributes]::ReparsePoint } |
         Select-Object -First 1
     if ($reparsePoint) {
-        throw "削除対象内の再解析ポイントを拒否した: $($reparsePoint.FullName)"
+        throw "Directory to be removed contains a reparse point: $($reparsePoint.FullName)"
     }
 }
 
@@ -134,10 +134,10 @@ function Get-TargetHome {
         $candidate = $env:USERPROFILE
     }
     if ([string]::IsNullOrWhiteSpace($candidate)) {
-        throw 'HOME と USERPROFILE のどちらからも対象ホームを解決できない。'
+        throw 'Neither HOME nor USERPROFILE identifies the target home.'
     }
     if (-not (Test-Path -LiteralPath $candidate -PathType Container)) {
-        throw "対象ホームが存在しない: $candidate"
+        throw "Target home does not exist: $candidate"
     }
 
     return (Resolve-Path -LiteralPath $candidate).ProviderPath
@@ -151,7 +151,7 @@ function Get-SafeTemporaryRoot {
     $resolvedTemporaryRoot = (Resolve-Path -LiteralPath $temporaryRoot).ProviderPath
     Assert-DescendantPath -ParentPath $RepositoryRoot -ChildPath $resolvedTemporaryRoot
     if ((Get-Item -LiteralPath $resolvedTemporaryRoot).Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
-        throw "一時ディレクトリが再解析ポイントであるため拒否した: $resolvedTemporaryRoot"
+        throw "Temporary directory is a reparse point: $resolvedTemporaryRoot"
     }
 
     return $resolvedTemporaryRoot
@@ -195,7 +195,7 @@ function Get-LegacySkillDirectories {
             Assert-DescendantPath -ParentPath $TargetHome -ChildPath $resolvedSkillDirectory
             Assert-NoReparsePointInPath -RootPath $TargetHome -TargetPath $resolvedSkillDirectory
             if ((Split-Path -Leaf $resolvedSkillDirectory) -ne $skillName) {
-                throw "削除候補名が一致しない: $resolvedSkillDirectory"
+                throw "Legacy Skill directory name does not match the expected name: $resolvedSkillDirectory"
             }
             Assert-NoNestedReparsePoint -Directory $resolvedSkillDirectory
 
@@ -224,13 +224,13 @@ function Backup-LegacySkills {
     [string[]]$sourceManifest = @(Get-FileManifest -BasePath $TargetHome -Directories $SkillDirectories)
     [string[]]$backupManifest = @(Get-FileManifest -BasePath $BackupRoot -Directories @($BackupRoot))
     if ($sourceManifest.Count -ne $backupManifest.Count) {
-        throw "バックアップのファイル数が一致しない。source=$($sourceManifest.Count), backup=$($backupManifest.Count)"
+        throw "Backup file count does not match the source. source=$($sourceManifest.Count), backup=$($backupManifest.Count)"
     }
 
     if ($sourceManifest.Count -gt 0) {
         $difference = Compare-Object -ReferenceObject $sourceManifest -DifferenceObject $backupManifest
         if ($difference) {
-            throw 'バックアップの相対パスまたは SHA-256 が一致しない。旧 Skill は削除しない。'
+            throw 'Backup paths or SHA-256 hashes do not match. Legacy Skill directories were not removed.'
         }
     }
 }
@@ -240,10 +240,10 @@ $rulesyncCommand = Resolve-RulesyncCommand -RepositoryRoot $repoRoot
 Set-Location -LiteralPath $repoRoot
 
 if ($DryRun) {
-    Write-Host 'ホームを変更せず Rulesync の dry-run を実行する。'
+    Write-Host 'Running Rulesync dry-run. The target home will not be modified.'
     Invoke-Rulesync -Command $rulesyncCommand -Arguments @('doctor', '--strict')
     Invoke-Rulesync -Command $rulesyncCommand -Arguments @('generate', '--global', '--dry-run')
-    Write-Host 'Dry-run が完了した。'
+    Write-Host 'Dry-run completed.'
     exit 0
 }
 
@@ -258,16 +258,16 @@ Assert-DescendantPath -ParentPath $temporaryRoot -ChildPath $backupRoot
 $legacySkillDirectories = @(Get-LegacySkillDirectories -TargetHome $targetHome)
 
 if ($legacySkillDirectories.Count -gt 0) {
-    Write-Host "旧 Skill をバックアップする: $backupRoot"
+    Write-Host "Backing up legacy Skill directories: $backupRoot"
     Backup-LegacySkills -TargetHome $targetHome -SkillDirectories $legacySkillDirectories -BackupRoot $backupRoot
 
 } else {
-    Write-Host '削除対象の旧 Skill は存在しない。'
+    Write-Host 'No legacy Skill directories to remove.'
 }
 
 try {
     foreach ($skillDirectory in $legacySkillDirectories) {
-        Write-Host "検証済みの旧 Skill を削除する: $skillDirectory"
+        Write-Host "Removing verified legacy Skill directory: $skillDirectory"
         Remove-Item -LiteralPath $skillDirectory -Recurse -Force
     }
 
@@ -275,13 +275,13 @@ try {
     Invoke-Rulesync -Command $rulesyncCommand -Arguments @('generate', '--global', '--check')
 } catch {
     if ($legacySkillDirectories.Count -gt 0) {
-        throw "Rulesync の適用に失敗した。旧 Skill のバックアップを元の相対パスへ再配置して復旧すること。backup=$backupRoot; error=$_"
+        throw "Rulesync apply failed. Restore the legacy Skill backup to its original relative paths. backup=$backupRoot; error=$_"
     }
     throw
 }
 
 if ($legacySkillDirectories.Count -gt 0) {
-    Write-Host "適用が完了した。バックアップ: $backupRoot"
+    Write-Host "Apply completed. Backup: $backupRoot"
 } else {
-    Write-Host '適用が完了した。'
+    Write-Host 'Apply completed.'
 }

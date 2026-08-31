@@ -7,7 +7,7 @@ function Assert-CommandExists {
     param([Parameter(Mandatory = $true)][string]$Name)
 
     if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
-        throw "必要なコマンド '$Name' が見つからない。インストールまたは更新は自動実行しない。"
+        throw "Required command '$Name' was not found. This script does not install or update dependencies."
     }
 }
 
@@ -28,7 +28,7 @@ function Resolve-RulesyncCommand {
         }
     }
 
-    throw '既存の Rulesync 実行ファイルが PATH または node_modules/.bin に見つからない。Rulesync の取得や更新は自動実行しない。'
+    throw 'No Rulesync executable was found on PATH or in node_modules/.bin. This script does not install or update Rulesync.'
 }
 
 function Invoke-Rulesync {
@@ -39,7 +39,7 @@ function Invoke-Rulesync {
 
     & $Command @Arguments
     if ($LASTEXITCODE -ne 0) {
-        throw "Rulesync が終了コード $LASTEXITCODE を返した: $($Arguments -join ' ')"
+        throw "Rulesync exited with code ${LASTEXITCODE}: $($Arguments -join ' ')"
     }
 }
 
@@ -53,7 +53,7 @@ function Assert-DescendantPath {
     $childFullPath = [System.IO.Path]::GetFullPath($ChildPath).TrimEnd('\', '/')
     $prefix = $parentFullPath + [System.IO.Path]::DirectorySeparatorChar
     if (-not $childFullPath.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
-        throw "安全境界外のパスを拒否した: $childFullPath"
+        throw "Path is outside the allowed root: $childFullPath"
     }
 }
 
@@ -64,7 +64,7 @@ function Assert-NoNestedReparsePoint {
         Where-Object { $_.Attributes -band [System.IO.FileAttributes]::ReparsePoint } |
         Select-Object -First 1
     if ($reparsePoint) {
-        throw "検証用ホーム内の再解析ポイントを拒否した: $($reparsePoint.FullName)"
+        throw "Test home contains a reparse point: $($reparsePoint.FullName)"
     }
 }
 
@@ -77,7 +77,7 @@ New-Item -ItemType Directory -Path $temporaryRoot -Force | Out-Null
 $resolvedTemporaryRoot = (Resolve-Path -LiteralPath $temporaryRoot).ProviderPath
 Assert-DescendantPath -ParentPath $repoRoot -ChildPath $resolvedTemporaryRoot
 if ((Get-Item -LiteralPath $resolvedTemporaryRoot).Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
-    throw "一時ディレクトリが再解析ポイントであるため拒否した: $resolvedTemporaryRoot"
+    throw "Temporary directory is a reparse point: $resolvedTemporaryRoot"
 }
 
 $testHome = Join-Path $resolvedTemporaryRoot 'home'
@@ -86,7 +86,7 @@ if (Test-Path -LiteralPath $testHome) {
     $resolvedTestHome = (Resolve-Path -LiteralPath $testHome).ProviderPath
     Assert-DescendantPath -ParentPath $resolvedTemporaryRoot -ChildPath $resolvedTestHome
     if ((Get-Item -LiteralPath $resolvedTestHome).Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
-        throw "検証用ホームが再解析ポイントであるため削除を拒否した: $resolvedTestHome"
+        throw "Refusing to remove the test home because it is a reparse point: $resolvedTestHome"
     }
     Assert-NoNestedReparsePoint -Directory $resolvedTestHome
     Remove-Item -LiteralPath $resolvedTestHome -Recurse -Force
@@ -110,11 +110,11 @@ try {
 
     $content = Get-Content -LiteralPath $claudeConfig -Raw | ConvertFrom-Json
     if ($content.dummyKey -ne 'this-should-survive') {
-        throw '非破壊性検証に失敗した。.claude.json の dummyKey が削除または変更された。'
+        throw 'Non-destructive configuration check failed: dummyKey was removed or changed in .claude.json.'
     }
 } finally {
     $env:HOME = $previousHome
     $env:USERPROFILE = $previousUserProfile
 }
 
-Write-Host "検証が完了した。一時ホーム: $testHome"
+Write-Host "Verification completed. Test home: $testHome"
