@@ -1,5 +1,6 @@
 # Temporary files
 tmp/
+node_modules/
 .agent-source-mcp.state
 .DS_Store
 
