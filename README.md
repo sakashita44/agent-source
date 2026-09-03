@@ -33,7 +33,6 @@ agent-source/
 - `rulesync.jsonc`: 生成対象と配布する機能を定める
 - `.rulesync/rules/`: 全環境に共通する規則と、エージェントごとのサブエージェント利用規則を収める
 - `.rulesync/skills/`: 実装、成果物、文章、検証、Git、サブエージェント利用の原則を Skill 単位で収める
-- `.rulesync/skills/subagent/references/`: 各 CLI やエージェント機能を使うための環境別参照を収める
 - `.rulesync/mcp.jsonc`: 配布する MCP 設定を定める
 - `scripts/verify.ps1`: 隔離した一時ホームへ生成し、設定の非破壊性と生成結果を検証する
 - `scripts/apply.ps1`: dry-run、旧 Skill のバックアップと限定削除、実ホームへの生成、生成結果の検査を行う
