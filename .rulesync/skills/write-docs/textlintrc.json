@@ -1,0 +1,10 @@
+{
+  "plugins": {
+    "@textlint/markdown": {
+      "extensions": [".md"]
+    }
+  },
+  "rules": {
+    "preset-ai-writing": true
+  }
+}
