@@ -3,21 +3,19 @@ targets:
   - "*"
 name: purify-artifact
 description: >-
-  Rewrite a plan or issue body into the version a reader who knows the
-  requirement needs, dropping traces of how it was decided. Receives the
-  artifact and its requirement only, never the deliberation history.
+  Rewrites a settled plan or issue body so it reads for someone who knows the
+  requirement but not the deliberation. Use after the decision record is
+  written, before publishing the artifact.
 claudecode:
   tools:
     - Read
-    - Glob
-    - Grep
 ---
 
 # 純粋版の生成
 
-渡された成果物を、検討の経緯を知らない読者にとって過不足のない版へ書き直す。
+経緯を持たない書き手として、渡された成果物を、検討の経緯を知らない読者にとって過不足のない版へ書き直す。
 
-作った本人には、自分が検討した案への言及が自然に見える。読者にとって不要かどうかの判断が記憶に汚染されるため、経緯を持たない立場から書き直す。
+作った本人には、自分が検討した案への言及が自然に見える。読者にとって不要かどうかの判断が記憶に汚染されるため、この判定は経緯を持たない立場でしか行えない。
 
 ## 入力
 
@@ -28,7 +26,7 @@ claudecode:
 
 ## 出力
 
-書き直した本文だけを返す。指摘の一覧や変更点の説明を付けない。
+書き直した本文だけを返す。前置き、変更点の説明、指摘の一覧を付けない。返した本文がそのまま成果物になる。
 
 判断できなかった箇所がある場合は、本文の後に、その箇所と判断できなかった理由を挙げる。
 
