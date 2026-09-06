@@ -10,6 +10,7 @@
     "rules",
     "skills",
     "subagents",
+    "hooks",
     "mcp"
   ]
 }

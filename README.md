@@ -23,7 +23,10 @@ agent-source/
 ├── .rulesync/
 │   ├── rules/
 │   ├── skills/
+│   ├── subagents/
+│   ├── hooks.jsonc
 │   └── mcp.jsonc
+├── hooks/
 ├── scripts/
 │   ├── apply.ps1
 │   └── verify.ps1
@@ -35,10 +38,13 @@ agent-source/
 - `.rulesync/rules/`: 全環境に共通する規則と、エージェントごとのサブエージェント利用規則を収める
 - `.rulesync/skills/`: 実装、成果物、文章、検証、Git、サブエージェント利用の原則を Skill 単位で収める
 - `.rulesync/mcp.jsonc`: 配布する MCP 設定を定める
+- `.rulesync/subagents/`: ツール制限を伴うサブエージェント定義を収める
+- `.rulesync/hooks.jsonc`: 配布する AI エージェントの hook を定める
+- `hooks/`: hook から呼ぶスクリプトを収める。Rulesync は hook の設定ファイルだけを配るため、`scripts/apply.ps1` が `~/.agent-source/hooks/` へ配置する
 - `scripts/verify.ps1`: 隔離した一時ホームへ生成し、設定の非破壊性と生成結果を検証する
 - `scripts/apply.ps1`: dry-run、旧 Skill のバックアップと限定削除、実ホームへの生成、生成結果の検査を行う
 
-Rulesync は `claudecode`、`codexcli`、`antigravity-ide`、`antigravity-cli` を対象とし、rules、skills、MCP を配布する。
+Rulesync は `claudecode`、`codexcli`、`antigravity-ide`、`antigravity-cli` を対象とし、rules、skills、subagents、hooks、MCP を配布する。hook の対象イベントは `claudecode` と `codexcli` だけが持つため、Antigravity では compact 対策が働かない。
 
 `tmp/` は Git の管理対象外であり、検証用ホームと適用前バックアップの保存先として使用される。
 

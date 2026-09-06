@@ -1,0 +1,37 @@
+{
+  "hooks": {},
+
+  // compact対策。圧縮の直前に状態を書き出し、直後にmarkerを置き、次の注入点でmarkerを検出して
+  // エージェントへ読み直しを指示する。PostCompactは追加コンテキストを返せないため、この2段構成を採る。
+  // スクリプトはrulesyncが運ばない。scripts/apply.ps1が ~/.agent-source/hooks/ へ配る。
+  // Antigravityはこれらのイベントを持たないため、配布しない。
+  "claudecode": {
+    "hooks": {
+      "preCompact": [
+        { "type": "command", "command": "node ~/.agent-source/hooks/compact-hook.mjs save" }
+      ],
+      "postCompact": [
+        { "type": "command", "command": "node ~/.agent-source/hooks/compact-hook.mjs mark" }
+      ],
+      "sessionStart": [
+        { "type": "command", "matcher": "compact", "command": "node ~/.agent-source/hooks/compact-hook.mjs inject" }
+      ],
+      "beforeSubmitPrompt": [
+        { "type": "command", "command": "node ~/.agent-source/hooks/compact-hook.mjs inject" }
+      ]
+    }
+  },
+  "codexcli": {
+    "hooks": {
+      "preCompact": [
+        { "type": "command", "command": "node ~/.agent-source/hooks/compact-hook.mjs save" }
+      ],
+      "postCompact": [
+        { "type": "command", "command": "node ~/.agent-source/hooks/compact-hook.mjs mark" }
+      ],
+      "beforeSubmitPrompt": [
+        { "type": "command", "command": "node ~/.agent-source/hooks/compact-hook.mjs inject" }
+      ]
+    }
+  }
+}
