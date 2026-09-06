@@ -50,6 +50,8 @@ npx --yes --package textlint@15.8.0 --package textlint-rule-preset-ai-writing@1.
 
 対象リポジトリが同種の検査を既に持つ場合は、そちらを優先して実行する。
 
+日本語の自然さと読みやすさは`natural-japanese`が扱う。文体と表現の規則が食い違う場合は`writing-principles`に従う。
+
 検査の出力は判断材料であり、そのまま指摘件数にしない。構造検査の件数と形状は、意味上の妥当性を本文から判定したうえで扱う。
 
 ## 完了確認

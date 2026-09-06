@@ -6,6 +6,7 @@
 
 - Node.js 22 以上
 - Rulesync 16.3.0 以上
+- uv（`natural-japanese` Skillの同梱スクリプトを実行する場合）
 
 初回またはlockfile更新後に、リポジトリで固定したRulesyncを導入する。
 
