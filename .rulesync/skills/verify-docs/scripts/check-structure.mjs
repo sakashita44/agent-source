@@ -12,13 +12,14 @@ export function removeCodeFence(lines) {
     if (fence === null) {
       const match = line.match(/^\s*(`{3,}|~{3,})/);
       if (match) {
-        fence = match[1].charAt(0);
+        // 開始フェンスの長さを覚える。覚えないと、入れ子にしたフェンスの内側で閉じたと判定する。
+        fence = { char: match[1].charAt(0), length: match[1].length };
         out.push('');
         continue;
       }
       out.push(line);
     } else {
-      const closingRegex = new RegExp(`^\\s*(${fence}{3,})\\s*$`);
+      const closingRegex = new RegExp(`^\\s*(${fence.char}{${fence.length},})\\s*$`);
       if (closingRegex.test(line)) {
         fence = null;
       }

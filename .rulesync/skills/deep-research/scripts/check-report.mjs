@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 // レポートの言語は依頼に合わせるため、除外する見出しも言語ごとに持つ。
 const EXCLUDED_SECTION_PATTERN = /^(エグゼクティブサマリ|結論と示唆|未解決の論点|Sources|Executive Summary|Conclusion|Implications|Open Questions|Limitations)/i;
-const URL_PATTERN = /https?:\/\/[^\s)\]>"']+/g;
+const URL_PATTERN = /https?:\/\/[^\s<>"']+/g;
 
 export function extractSourceUrls(markdown) {
     const urls = new Set();
@@ -19,13 +19,35 @@ export function extractSourceUrls(markdown) {
             continue;
         }
         for (const url of line.match(URL_PATTERN) ?? []) {
-            urls.add(url.replace(/[.,]+$/, ""));
+            urls.add(trimTrailingPunctuation(url));
         }
     }
 
     return [...urls];
 }
 
+// 括弧を含むurlがあるため、末尾の記号は一律に落とさない。閉じ括弧は、対応する開き括弧が
+// 足りない場合だけ落とす。Wikipediaのような `..._(language_model)` を途中で切らないため。
+export function trimTrailingPunctuation(url) {
+    let result = url;
+    for (;;) {
+        const last = result.slice(-1);
+        if (".,;:!?".includes(last)) {
+            result = result.slice(0, -1);
+            continue;
+        }
+        if (last === ")" || last === "]") {
+            const open = last === ")" ? "(" : "[";
+            const opens = result.split(open).length - 1;
+            const closes = result.split(last).length - 1;
+            if (closes > opens) {
+                result = result.slice(0, -1);
+                continue;
+            }
+        }
+        return result;
+    }
+}
 export function findSectionsWithoutCitation(markdown) {
     const missing = [];
     let section = null;

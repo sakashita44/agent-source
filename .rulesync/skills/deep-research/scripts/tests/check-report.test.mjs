@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { checkLinkReachability, extractSourceUrls, findSectionsWithoutCitation, parseArguments } from "../check-report.mjs";
+import { checkLinkReachability, extractSourceUrls, findSectionsWithoutCitation, parseArguments, trimTrailingPunctuation } from "../check-report.mjs";
 
 const REPORT = [
     "# 調査レポート",
@@ -108,4 +108,17 @@ test("一部だけ通信エラーならオフラインとしない", async () =>
 
     assert.equal(result.offline, false);
     assert.equal(result.unreachable.length, 1);
+});
+test("括弧を含むurlを途中で切らない", () => {
+    const markdown = "## Sources\n- <https://ja.wikipedia.org/wiki/Gemini_(言語モデル)>\n- https://example.invalid/a.\n";
+    assert.deepEqual(extractSourceUrls(markdown), [
+        "https://ja.wikipedia.org/wiki/Gemini_(言語モデル)",
+        "https://example.invalid/a",
+    ]);
+});
+
+test("対応しない閉じ括弧だけを落とす", () => {
+    assert.equal(trimTrailingPunctuation("https://example.invalid/a(b)"), "https://example.invalid/a(b)");
+    assert.equal(trimTrailingPunctuation("https://example.invalid/a)"), "https://example.invalid/a");
+    assert.equal(trimTrailingPunctuation("https://example.invalid/a,"), "https://example.invalid/a");
 });
