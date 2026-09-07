@@ -1,10 +1,15 @@
 ---
 name: justify-code
 description: >-
-  Use when asking whether existing code should exist at all, when reviewing a
-  codebase for code that the current requirements no longer justify, or when
-  looking for hand-written code that a standard library or an existing
-  dependency already covers. Reports candidates; it does not delete.
+  Reviews existing code for parts the current requirements no longer justify,
+  and for hand-written code a standard library or an existing dependency
+  already covers. Reports candidates and never deletes. The user starts this
+  skill explicitly.
+claudecode:
+  disable-model-invocation: true
+codexcli:
+  policy:
+    allow_implicit_invocation: false
 ---
 # Justify Code
 
@@ -13,6 +18,10 @@ description: >-
 判定には、コードの外にある要求が要る。ある抽象化が現在の仕様で必要なのか、将来を見越した先回りなのかは、要求を参照しないと決まらない。
 
 削除しない。候補と根拠を報告し、判断と実行は利用者に委ねる。
+
+## 実行条件
+
+ユーザーが明示的に依頼した場合だけ使用する。実装やレビューの流れで自発的に起動しない。
 
 ## 問う範囲
 

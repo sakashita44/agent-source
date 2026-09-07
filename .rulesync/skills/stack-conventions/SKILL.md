@@ -10,7 +10,7 @@ description: >-
 
 開発領域ごとに、採用方式を決める前に確認する情報源を定める。領域単位の参考は[references](references)に収める。
 
-このSkillは、確認すべき情報源と確認の手順を正本として定める。個々のライブラリ選定の判断基準は`engineering-principles`が正本であり、ここでは扱わない。
+このSkillは、確認すべき情報源と確認の手順を定める。個々のライブラリ選定の判断基準は`engineering-principles`を参照する。
 
 ## 参考の位置づけ
 

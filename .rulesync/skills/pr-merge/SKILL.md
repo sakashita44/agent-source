@@ -7,7 +7,9 @@ description: >-
 ---
 # PR Merge
 
-レビューが終わったPRをマージし、ブランチの後始末まで進める。Git操作の共通原則は`git-general`、検証の選択と完了判定は`verification-principles`が正本であり、このSkillはGitHub固有の状態取得と順序を扱う。
+レビューが終わったPRをマージし、ブランチの後始末まで進める。GitHub固有の状態取得と、マージ前後の順序を扱う。
+
+Git操作の共通原則は`git-general`、検証の選択と完了判定は`verification-principles`を参照する。
 
 ## 実行条件
 

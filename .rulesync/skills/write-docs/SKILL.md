@@ -8,7 +8,9 @@ description: >-
 ---
 # Write Docs
 
-技術文書を執筆し、更新する。読者、目的、時間、表現の原則は`writing-principles`、情報と意図の配置は`artifact-principles`が正本であり、このSkillは構成の手順、内容種別ごとの必須情報、完了前の機械検査を扱う。
+技術文書を執筆し、更新する。構成の手順、内容種別ごとの必須情報、完了前の機械検査を扱う。
+
+読者、目的、時間、表現の原則は`writing-principles`、情報と意図の配置は`artifact-principles`を参照する。
 
 ## 適用範囲
 
