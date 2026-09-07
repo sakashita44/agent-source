@@ -6,7 +6,9 @@
 
 `agy -p`に、目的、対象、許可範囲、制約、完了条件、必要な報告を含む自己完結したプロンプトを渡す。
 
-- 調査、比較、提案には、原則としてPro High級のモデルと高い推論強度を用いる。モデルIDは固定せず、`agy models`に表示される利用可能な候補から選ぶ
+- モデルは、ユーザーの指示があればそれに従う。指示がなければ、`agy models`が表示する候補のうち最も新しい世代のものを選ぶ
+- 同じ世代に複数のティアがある場合は、上位のティアを選ぶ
+- 推論強度は最上位を用いる。強度がモデルIDへ含まれる場合は、最上位の強度を持つIDを選ぶ
 - `--print-timeout`には`10m`、`1h`のような単位付きの時間を指定する。既定時間は広いリポジトリ調査やMCPを使う調査には不足する場合があるため、対象量に応じて余裕を持たせる
 - ワークスペース外の対象が必要な場合は、追加ディレクトリを明示する
 - 非対話実行で権限確認に応答できない場合は、依頼範囲内で必要なアクセスだけを事前に許可する
@@ -19,7 +21,7 @@
 ```powershell
 $prompt = Get-Content '<prompt-file>' -Raw
 if ([string]::IsNullOrWhiteSpace($prompt)) { throw 'prompt is empty' }
-agy -p $prompt --model '<Pro High級のモデルID>' --effort high --print-timeout 20m
+agy -p $prompt --model '<選んだモデルID>' --effort high --print-timeout 20m
 ```
 
 `--output-format json`または`stream-json`は、結果を機械処理する場合や進捗イベントを取得する場合に用いる。構造を保証する必要がある場合は`--json-schema`を併用する。
