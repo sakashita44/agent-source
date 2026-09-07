@@ -9,5 +9,5 @@ node_modules/
 .idea/
 old/
 
-# rulesync fetch で取得する第三者Skill
-.rulesync/skills/natural-japanese/
+# rulesync install が取得する第三者Skill
+.rulesync/skills/.curated/

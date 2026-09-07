@@ -1,0 +1,15 @@
+{
+  "lockfileVersion": 1,
+  "sources": {
+    "coji/natural-japanese": {
+      "requestedRef": "main",
+      "resolvedRef": "9a78a42964096da509b8f3e011f0085a5f080151",
+      "resolvedAt": "2026-09-07T04:35:20.896Z",
+      "skills": {
+        "natural-japanese": {
+          "integrity": "sha256-dde348f62ccdd0f932b7e22478d3e66360d0fb23962e383e18a45239fc39178b"
+        }
+      }
+    }
+  }
+}

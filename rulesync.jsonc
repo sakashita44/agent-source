@@ -12,5 +12,12 @@
     "subagents",
     "hooks",
     "mcp"
+  ],
+  "sources": [
+    {
+      "source": "coji/natural-japanese",
+      "transport": "github",
+      "skills": ["natural-japanese"]
+    }
   ]
 }

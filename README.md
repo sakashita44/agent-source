@@ -31,10 +31,11 @@ agent-source/
 │   ├── apply.ps1
 │   └── verify.ps1
 ├── tmp/
-└── rulesync.jsonc
+├── rulesync.jsonc
+└── rulesync.lock
 ```
 
-- `rulesync.jsonc`: 生成対象と配布する機能を定める
+- `rulesync.jsonc`: 生成対象、配布する機能、外部から取得するSkillの取得元を定める
 - `.rulesync/rules/`: 全環境に共通する規則と、エージェントごとのサブエージェント利用規則を収める
 - `.rulesync/skills/`: 実装、成果物、文章、検証、Git、サブエージェント利用の原則を Skill 単位で収める
 - `.rulesync/mcp.jsonc`: 配布する MCP 設定を定める
@@ -50,17 +51,18 @@ Rulesync は `claudecode`、`codexcli`、`antigravity-ide`、`antigravity-cli` �
 
 ## 第三者 Skill の取得
 
-`natural-japanese` は上流のリポジトリから取得して配布する。取得結果は Git の管理対象外であり、複製をこのリポジトリへ置かない。
+外部リポジトリの Skill は `rulesync.jsonc` の `sources` で宣言し、取得コマンドで持ち込む。本体はこのリポジトリで管理せず、取得先の ref は `rulesync.lock` が固定する。
 
 ```powershell
-npx rulesync fetch coji/natural-japanese --ref 9a78a42964096da509b8f3e011f0085a5f080151
+npx rulesync install
 ```
 
-- 取得元: <https://github.com/coji/natural-japanese>（MIT）
-- 取得先: `.rulesync/skills/natural-japanese/`
-- 更新するときは、上流の新しいコミット SHA を指定して再取得し、この手順の SHA を書き換える
+- 取得先: `.rulesync/skills/.curated/`。Git の管理対象外
+- `rulesync.lock`: 解決した commit SHA と整合性ハッシュを記録する。この 1 ファイルだけを Git で管理する
+- 上流へ追随するときは `npx rulesync install --update` を実行し、更新後の `rulesync.lock` をコミットする
+- CI や再現が要る場面では `npx rulesync install --frozen` を使い、lockfile の ref で取得する
 
-取得後は `scripts/apply.ps1` が他の Skill と同じ流れで配布する。取得していない環境では、この Skill だけが配布されない。
+取得後は `scripts/apply.ps1` が他の Skill と同じ流れで配布する。取得していない環境では、宣言した Skill だけが配布されない。
 
 ## 実行手順
 
