@@ -1,73 +1,159 @@
 import assert from "node:assert/strict";
+import { existsSync, mkdtempSync, rmSync, utimesSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { basename, join } from "node:path";
 import { Readable } from "node:stream";
 import test from "node:test";
-import { basename } from "node:path";
-import { buildInjection, buildState, readInput, removeExpired, stateKey } from "../compact-hook.mjs";
+import { buildInjection, buildState, inject, mark, readInput, removeExpired, restore, save, stateKey } from "../compact-hook.mjs";
 
 const BACKSLASH = String.fromCharCode(92);
 
-test("session_idを状態のキーにする", () => {
-    assert.equal(stateKey({ session_id: "abc-123", cwd: "/repo" }), "abc-123");
+function newDir() {
+    return mkdtempSync(join(tmpdir(), "compact-hook-test-"));
+}
+
+test("agent_idを最優先の状態キーにする", () => {
+    assert.equal(stateKey({ agent_id: "sub-1", session_id: "root-1" }), "sub-1");
 });
 
-test("session_idがなければcwdで代用する", () => {
+test("agent_idがなければsession_idを使う", () => {
+    assert.equal(stateKey({ session_id: "root-1", cwd: "/repo" }), "root-1");
+});
+
+test("識別子がなければcwdで代用する", () => {
     assert.equal(stateKey({ cwd: "D:" + BACKSLASH + "work" + BACKSLASH + "repo" }), "D__work_repo");
 });
 
-test("入力が空でもキーが決まる", () => {
-    assert.equal(stateKey({}), "unknown");
+test("入力が空でもプロセスの作業ディレクトリでキーが決まる", () => {
+    assert.equal(stateKey({}), stateKey({ cwd: process.cwd() }));
 });
 
-test("状態へ作業ディレクトリと時刻を残す", () => {
-    const state = buildState({ session_id: "s1", cwd: "/repo" }, Date.parse("2026-09-07T10:00:00Z"));
-    assert.equal(state.key, "s1");
+test("状態へ作業ディレクトリ、記録の場所、時刻を残す", () => {
+    const state = buildState({ session_id: "s1", cwd: "/repo", transcript_path: "/t.jsonl" }, Date.parse("2026-09-07T10:00:00Z"));
     assert.equal(state.cwd, "/repo");
+    assert.equal(state.transcript, "/t.jsonl");
     assert.equal(state.compactedAt, "2026-09-07T10:00:00.000Z");
 });
 
-test("注入文へ作業ディレクトリと時刻を含める", () => {
-    const text = buildInjection({ cwd: "/repo", compactedAt: "2026-09-07T10:00:00.000Z" });
+test("注入文へ作業ディレクトリと記録の場所を含める", () => {
+    const text = buildInjection({ cwd: "/repo", transcript: "/t.jsonl", compactedAt: "2026-09-07T10:00:00.000Z" });
     assert.match(text, /圧縮/);
     assert.match(text, /\/repo/);
-    assert.match(text, /2026-09-07T10:00:00\.000Z/);
+    assert.match(text, /\/t\.jsonl/);
 });
 
 test("状態がなくても注入文を作れる", () => {
-    const text = buildInjection(null);
-    assert.match(text, /読み直す/);
-    assert.doesNotMatch(text, /作業ディレクトリ:/);
+    assert.match(buildInjection(null), /読み直す/);
 });
 
-test("期限切れのファイルだけを消す", () => {
-    const now = Date.parse("2026-09-07T00:00:00Z");
-    const day = 24 * 60 * 60 * 1000;
-    const mtimes = { "old.json": now - 8 * day, "new.json": now - 1 * day };
-    const removed = [];
+test("Claude Codeの順序（SessionStartが先）で一度だけ注入する", () => {
+    const dir = newDir();
+    const input = { session_id: "cc-1", cwd: "/repo" };
+    try {
+        save(input, Date.now(), dir);
+        const first = restore(input, dir);
+        assert.match(first, /圧縮/);
+        assert.equal(mark(input, dir), "kept-injected-mark");
+        assert.equal(inject(input, dir), null);
+        assert.equal(restore(input, dir), null);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
 
-    const count = removeExpired("/state", now, {
-        readdir: () => Object.keys(mtimes),
-        stat: (path) => ({ mtimeMs: mtimes[basename(path)] }),
-        remove: (path) => removed.push(basename(path)),
-    });
+test("Codexの順序（PostCompactが先）で一度だけ注入する", () => {
+    const dir = newDir();
+    const input = { session_id: "cx-1", cwd: "/repo" };
+    try {
+        save(input, Date.now(), dir);
+        assert.equal(mark(input, dir), "wrote-marker");
+        const first = restore(input, dir);
+        assert.match(first, /圧縮/);
+        assert.equal(inject(input, dir), null);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
 
-    assert.equal(count, 1);
-    assert.deepEqual(removed, ["old.json"]);
+test("SessionStartが届かない場合はUserPromptSubmitが注入する", () => {
+    const dir = newDir();
+    const input = { agent_id: "sub-1" };
+    try {
+        save(input, Date.now(), dir);
+        assert.equal(mark(input, dir), "wrote-marker");
+        assert.match(inject(input, dir), /圧縮/);
+        assert.equal(inject(input, dir), null);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test("圧縮が起きていなければ何も注入しない", () => {
+    const dir = newDir();
+    try {
+        assert.equal(restore({ session_id: "none" }, dir), null);
+        assert.equal(inject({ session_id: "none" }, dir), null);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test("親と子で状態を分ける", () => {
+    const dir = newDir();
+    const parent = { session_id: "root-1" };
+    const child = { session_id: "root-1", agent_id: "sub-1" };
+    try {
+        save(parent, Date.now(), dir);
+        save(child, Date.now(), dir);
+        assert.equal(mark(child, dir), "wrote-marker");
+        assert.equal(inject(parent, dir), null);
+        assert.match(inject(child, dir), /圧縮/);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test("残った注入済み印は次の圧縮で失効する", () => {
+    const dir = newDir();
+    const input = { session_id: "stale-1" };
+    try {
+        save(input, Date.now(), dir);
+        assert.match(restore(input, dir), /圧縮/);
+        // PostCompactが落ちて印が残った状態を作る。次の圧縮で新しいstateが書かれる。
+        const later = Date.now() + 60000;
+        save(input, later, dir);
+        utimesSync(join(dir, "stale-1.json"), new Date(later), new Date(later));
+        assert.match(restore(input, dir), /圧縮/);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test("saveが期限切れのファイルを掃除する", () => {
+    const dir = newDir();
+    try {
+        save({ session_id: "old" }, Date.now(), dir);
+        const old = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+        utimesSync(join(dir, "old.json"), old, old);
+        save({ session_id: "new" }, Date.now(), dir);
+        assert.equal(existsSync(join(dir, "old.json")), false);
+        assert.equal(existsSync(join(dir, "new.json")), true);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
 });
 
 test("消せないファイルがあっても掃除を続ける", () => {
-    const now = Date.now();
-    const count = removeExpired("/state", now, {
+    const count = removeExpired("/state", Date.now(), {
         readdir: () => ["a.json", "b.json"],
         stat: () => ({ mtimeMs: 0 }),
-        remove: (path) => { if (path.endsWith("a.json")) throw new Error("EPERM"); },
+        remove: (path) => { if (basename(path) === "a.json") throw new Error("EPERM"); },
     });
-
     assert.equal(count, 1);
 });
 
 test("標準入力のJSONを読む", async () => {
-    const input = await readInput(Readable.from([Buffer.from('{"session_id":"s1"}')]));
-    assert.deepEqual(input, { session_id: "s1" });
+    assert.deepEqual(await readInput(Readable.from([Buffer.from('{"session_id":"s1"}')])), { session_id: "s1" });
 });
 
 test("標準入力が空またはJSONでなくても失敗しない", async () => {

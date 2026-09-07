@@ -3,15 +3,17 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, s
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-// イベントの組み合わせと2段構成は https://github.com/u-ichi/compact-plus
-// を参照した。実装は共有していない。
-const STATE_DIR = join(homedir(), ".agent-source", "state", "compact");
+// イベントの組み合わせと、注入を一度に保つhandshakeは
+// https://github.com/u-ichi/compact-plus を参照した。実装は共有していない。
+// Claude CodeはSessionStartをPostCompactより先に配送し、Codexは逆になる。
+// どちらの順でも一度だけ注入するため、markerと注入済み印を相互に消費する。
+const DEFAULT_DIR = join(homedir(), ".agent-source", "state", "compact");
 const EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
 
 export function stateKey(input) {
-    // Claude Codeはsession_idを渡す。渡さない実行環境ではcwdで代用するため、
-    // 同じディレクトリで並行するセッションは互いの状態を上書きする。
-    const raw = input.session_id ?? input.sessionId ?? input.cwd ?? "unknown";
+    // Codexのsession_idはroot threadと全子孫で共有される。subagentにはagent_idが付くため、
+    // agent_idを優先しないとsubagentのstateが親のstateを上書きする。
+    const raw = input.agent_id ?? input.agentId ?? input.session_id ?? input.sessionId ?? input.cwd ?? process.cwd();
     return String(raw).replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 120);
 }
 
@@ -19,6 +21,7 @@ export function buildState(input, now) {
     return {
         key: stateKey(input),
         cwd: input.cwd ?? null,
+        transcript: input.transcript_path ?? input.transcriptPath ?? null,
         compactedAt: new Date(now).toISOString(),
     };
 }
@@ -33,6 +36,9 @@ export function buildInjection(state) {
     ];
     if (state?.cwd) {
         lines.push(`- 圧縮時の作業ディレクトリ: ${state.cwd}`);
+    }
+    if (state?.transcript) {
+        lines.push(`- 圧縮前の記録: ${state.transcript}`);
     }
     if (state?.compactedAt) {
         lines.push(`- 圧縮の時刻: ${state.compactedAt}`);
@@ -72,56 +78,94 @@ export async function readInput(stream) {
     }
 }
 
-function statePath(key) {
-    return join(STATE_DIR, `${key}.json`);
-}
+const statePath = (dir, key) => join(dir, `${key}.json`);
+const markerPath = (dir, key) => join(dir, `${key}.marker`);
+const injectedPath = (dir, key) => join(dir, `${key}.injected`);
 
-function markerPath(key) {
-    return join(STATE_DIR, `${key}.marker`);
-}
-
-function save(input, now) {
-    mkdirSync(STATE_DIR, { recursive: true });
-    const state = buildState(input, now);
-    writeFileSync(statePath(state.key), JSON.stringify(state), "utf8");
-    removeExpired(STATE_DIR, now);
-}
-
-function mark(input) {
-    mkdirSync(STATE_DIR, { recursive: true });
-    writeFileSync(markerPath(stateKey(input)), "", "utf8");
-}
-
-function inject(input) {
-    const key = stateKey(input);
-    const marker = markerPath(key);
-    if (!existsSync(marker)) {
-        return null;
-    }
-
-    // 一度しか注入しないよう、読む前にmarkerを退避する。並行実行では
-    // renameに成功した側だけが注入する。
-    const claimed = `${marker}.claimed`;
+function readState(dir, key) {
     try {
-        renameSync(marker, claimed);
+        return JSON.parse(readFileSync(statePath(dir, key), "utf8"));
     } catch {
         return null;
     }
+}
 
-    let state = null;
+function claim(path) {
+    // 読む前に退避することで、並行実行では退避に成功した側だけが注入する。
+    const claimed = `${path}.claimed`;
     try {
-        state = JSON.parse(readFileSync(statePath(key), "utf8"));
+        renameSync(path, claimed);
     } catch {
-        state = null;
+        return false;
     }
-
     try {
         rmSync(claimed);
     } catch {
-        // 消せなくても注入済みの事実は変わらない。
+        // 消せなくても消費済みの事実は変わらない。
     }
+    return true;
+}
 
+export function isInjectedMarkFresh(dir, key, { stat = statSync } = {}) {
+    try {
+        // PostCompactが落ちて印が残った場合、次の圧縮で書かれるstateのほうが新しくなる。
+        // 印がstateより古ければ失効とみなし、注入を沈黙させない。
+        return stat(injectedPath(dir, key)).mtimeMs >= stat(statePath(dir, key)).mtimeMs;
+    } catch {
+        return false;
+    }
+}
+
+export function save(input, now, dir = DEFAULT_DIR) {
+    mkdirSync(dir, { recursive: true });
+    const state = buildState(input, now);
+    writeFileSync(statePath(dir, state.key), JSON.stringify(state), "utf8");
+    removeExpired(dir, now);
+    return state;
+}
+
+export function mark(input, dir = DEFAULT_DIR) {
+    mkdirSync(dir, { recursive: true });
+    const key = stateKey(input);
+    if (isInjectedMarkFresh(dir, key)) {
+        // 印は消さない。次の圧縮でstateが書き直されると失効するため、
+        // 残しておくほうが同じ圧縮での二重注入を防げる。
+        return "kept-injected-mark";
+    }
+    writeFileSync(markerPath(dir, key), "", "utf8");
+    return "wrote-marker";
+}
+
+export function restore(input, dir = DEFAULT_DIR) {
+    const key = stateKey(input);
+    const state = readState(dir, key);
+    if (!state) {
+        return null;
+    }
+    if (existsSync(markerPath(dir, key))) {
+        if (!claim(markerPath(dir, key))) {
+            return null;
+        }
+        return buildInjection(state);
+    }
+    if (isInjectedMarkFresh(dir, key)) {
+        return null;
+    }
+    try {
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(injectedPath(dir, key), "", "utf8");
+    } catch {
+        return null;
+    }
     return buildInjection(state);
+}
+
+export function inject(input, dir = DEFAULT_DIR) {
+    const key = stateKey(input);
+    if (!existsSync(markerPath(dir, key)) || !claim(markerPath(dir, key))) {
+        return null;
+    }
+    return buildInjection(readState(dir, key));
 }
 
 async function main() {
@@ -136,15 +180,15 @@ async function main() {
         mark(input);
         return;
     }
-    if (mode === "inject") {
-        const text = inject(input);
+    if (mode === "restore" || mode === "inject") {
+        const text = mode === "restore" ? restore(input) : inject(input);
         if (text) {
             process.stdout.write(`${text}\n`);
         }
         return;
     }
 
-    process.stderr.write("Usage: compact-hook.mjs save|mark|inject\n");
+    process.stderr.write("Usage: compact-hook.mjs save|mark|restore|inject\n");
     process.exitCode = 1;
 }
 
