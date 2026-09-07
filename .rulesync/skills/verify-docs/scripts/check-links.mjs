@@ -87,12 +87,13 @@ export async function checkLinks(rawText, fetchFn = globalThis.fetch, { checkRea
     const refRegex = new RegExp(referenceLinkPattern);
     while ((match = refRegex.exec(text)) !== null) {
       const label = match[1];
-      if (!isAmbiguousLabel(label)) continue;
       let reference = match[2].trim();
       if (!reference) reference = label.trim();
       const key = reference.toLowerCase();
-      const destination = definitions.has(key) ? definitions.get(key) : `[${reference}]`;
-      findings.push(`  [要見直し] L${item.number} 「${label.trim()}」 -> ${destination}`);
+      const destination = definitions.has(key) ? definitions.get(key) : "[" + reference + "]";
+      if (isAmbiguousLabel(label)) {
+        findings.push("  [要見直し] L" + item.number + " 「" + label.trim() + "」 -> " + destination);
+      }
       
       if (destination.startsWith('http://') || destination.startsWith('https://')) {
         reachabilityChecks.push({ line: item.number, label: label.trim(), url: destination });

@@ -51,4 +51,4 @@
 - 網羅性: 承認済みプランのサブ質問すべてに回答したか。できなかったものは「未解決の論点」に書いたか
 - ソース品質: 主要な結論が一次情報に支えられているか。SEO 記事だけが根拠の結論はないか
 - 分量と言語: ユーザの指定に合っているか
-- 機械検証: `scripts/check_report.sh` (bash) または `scripts/check_report.ps1` (PowerShell) が RESULT: PASS を返しているか。FAIL のまま完成報告をしない
+- 機械検証: `scripts/check-report.mjs` が RESULT: PASS を返しているか。FAIL のまま完成報告をしない

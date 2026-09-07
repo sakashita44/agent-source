@@ -102,3 +102,20 @@ test('check-links - 到達性を求めない場合は節自体を出さない', 
   assert.doesNotMatch(result, /\[リンクの到達性\]/);
   assert.equal(called, false);
 });
+
+test('check-links - 曖昧でない参照リンクも到達性検査の対象にする', async () => {
+  const markdown = [
+    '',
+    '[設定の手引き][guide]',
+    '',
+    '[guide]: https://example.com/guide',
+    ''
+  ].join('\n');
+  const seen = [];
+  const mockFetch = async (url) => { seen.push(url); return { ok: true, status: 200 }; };
+
+  const result = (await checkLinks(markdown, mockFetch, { checkReachability: true })).join('\n');
+  assert.deepEqual(seen, ['https://example.com/guide']);
+  assert.match(result, /\[曖昧なリンク文言\]\n  なし/);
+  assert.match(result, /1 件すべて到達可能/);
+});
