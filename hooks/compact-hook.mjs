@@ -146,6 +146,12 @@ export function restore(input, dir = DEFAULT_DIR) {
         if (!claim(markerPath(dir, key))) {
             return null;
         }
+        // markerを消費した経路でも印を残す。SessionStartが再送された場合に二重注入しない。
+        try {
+            writeFileSync(injectedPath(dir, key), "", "utf8");
+        } catch {
+            // 印を残せなくても、markerは消費済みである。
+        }
         return buildInjection(state);
     }
     if (isInjectedMarkFresh(dir, key)) {
@@ -153,9 +159,19 @@ export function restore(input, dir = DEFAULT_DIR) {
     }
     try {
         mkdirSync(dir, { recursive: true });
-        writeFileSync(injectedPath(dir, key), "", "utf8");
-    } catch {
-        return null;
+        // 排他的な作成にすることで、同時に走ったrestoreのうち1つだけが注入する。
+        writeFileSync(injectedPath(dir, key), "", { encoding: "utf8", flag: "wx" });
+    } catch (error) {
+        if (error?.code !== "EEXIST") {
+            return null;
+        }
+        // 失効した印が残っている場合は、置き換えを試みた側だけが注入する。
+        try {
+            rmSync(injectedPath(dir, key));
+            writeFileSync(injectedPath(dir, key), "", { encoding: "utf8", flag: "wx" });
+        } catch {
+            return null;
+        }
     }
     return buildInjection(state);
 }

@@ -104,15 +104,23 @@ export async function checkLinks(rawText, fetchFn = globalThis.fetch, { checkRea
   let networkErrors = 0;
   if (checkReachability && fetchFn) {
     for (const check of reachabilityChecks) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 10000);
       try {
-        const res = await fetchFn(check.url, { method: "HEAD" });
-        // HEADを拒否して405を返すサイトがあるため、405は到達不可として扱わない。
-        if (!res.ok && res.status !== 405) {
+        let res = await fetchFn(check.url, { method: "HEAD", signal: controller.signal, redirect: "follow" });
+        // HEADを拒否して405や403を返すサイトがあるため、GETで確かめ直す。
+        if (!res.ok) {
+          res = await fetchFn(check.url, { method: "GET", signal: controller.signal, redirect: "follow" });
+        }
+        if (!res.ok) {
           reachabilityFindings.push(`  [要見直し] L${check.line} 「${check.label}」 -> ${check.url} (到達不可: ${res.status})`);
         }
       } catch (err) {
         networkErrors += 1;
-        reachabilityFindings.push(`  [確認不可] L${check.line} 「${check.label}」 -> ${check.url} (${err.message || "ネットワークエラー"})`);
+        const reason = err.name === "AbortError" ? "timeout" : (err.message || "ネットワークエラー");
+        reachabilityFindings.push(`  [確認不可] L${check.line} 「${check.label}」 -> ${check.url} (${reason})`);
+      } finally {
+        clearTimeout(timer);
       }
     }
   }

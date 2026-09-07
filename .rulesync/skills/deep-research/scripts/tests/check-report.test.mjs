@@ -50,7 +50,7 @@ test("CRLFの改行を扱える", () => {
 });
 
 test("到達しないurlを報告する", async () => {
-    const unreachable = await checkLinkReachability(["https://example.invalid/a", "https://example.invalid/b"], {
+    const { unreachable } = await checkLinkReachability(["https://example.invalid/a", "https://example.invalid/b"], {
         fetchImpl: async (url) => ({ ok: url.endsWith("/a"), status: 404 }),
     });
 
@@ -59,7 +59,7 @@ test("到達しないurlを報告する", async () => {
 
 test("HEADを拒否するurlをGETで確かめ直す", async () => {
     const methods = [];
-    const unreachable = await checkLinkReachability(["https://example.invalid/a"], {
+    const { unreachable } = await checkLinkReachability(["https://example.invalid/a"], {
         fetchImpl: async (_url, options) => {
             methods.push(options.method);
             return { ok: options.method === "GET", status: 405 };
@@ -71,7 +71,7 @@ test("HEADを拒否するurlをGETで確かめ直す", async () => {
 });
 
 test("通信の失敗を到達不能として扱う", async () => {
-    const unreachable = await checkLinkReachability(["https://example.invalid/a"], {
+    const { unreachable } = await checkLinkReachability(["https://example.invalid/a"], {
         fetchImpl: async () => { throw new Error("getaddrinfo ENOTFOUND"); },
     });
 
@@ -87,4 +87,25 @@ test("引数を解釈する", () => {
 test("不正な引数を拒否する", () => {
     assert.throws(() => parseArguments(["--report", "r.md"]), /Usage/);
     assert.throws(() => parseArguments(["--report", "r.md", "--min-sources", "x"]), /non-negative integer/);
+});
+
+test("全件が通信エラーならオフラインとして扱う", async () => {
+    const result = await checkLinkReachability(["https://example.invalid/a", "https://example.invalid/b"], {
+        fetchImpl: async () => { throw new Error("getaddrinfo ENOTFOUND"); },
+    });
+
+    assert.equal(result.offline, true);
+    assert.equal(result.unreachable.length, 2);
+});
+
+test("一部だけ通信エラーならオフラインとしない", async () => {
+    const result = await checkLinkReachability(["https://example.invalid/a", "https://example.invalid/b"], {
+        fetchImpl: async (url) => {
+            if (url.endsWith("/a")) { return { ok: true, status: 200 }; }
+            throw new Error("getaddrinfo ENOTFOUND");
+        },
+    });
+
+    assert.equal(result.offline, false);
+    assert.equal(result.unreachable.length, 1);
 });

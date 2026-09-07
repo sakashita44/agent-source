@@ -2,7 +2,8 @@
 import { readFileSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-const EXCLUDED_SECTION_PATTERN = /^(エグゼクティブサマリ|結論と示唆|未解決の論点|Sources)/;
+// レポートの言語は依頼に合わせるため、除外する見出しも言語ごとに持つ。
+const EXCLUDED_SECTION_PATTERN = /^(エグゼクティブサマリ|結論と示唆|未解決の論点|Sources|Executive Summary|Conclusion|Implications|Open Questions|Limitations)/i;
 const URL_PATTERN = /https?:\/\/[^\s)\]>"']+/g;
 
 export function extractSourceUrls(markdown) {
@@ -54,6 +55,7 @@ export function findSectionsWithoutCitation(markdown) {
 
 export async function checkLinkReachability(urls, { fetchImpl = fetch, timeoutMs = 10000 } = {}) {
     const unreachable = [];
+    let networkErrors = 0;
 
     for (const url of urls) {
         const controller = new AbortController();
@@ -68,13 +70,15 @@ export async function checkLinkReachability(urls, { fetchImpl = fetch, timeoutMs
                 unreachable.push({ url, reason: `HTTP ${response.status}` });
             }
         } catch (error) {
+            networkErrors += 1;
             unreachable.push({ url, reason: error.name === "AbortError" ? "timeout" : error.message });
         } finally {
             clearTimeout(timer);
         }
     }
 
-    return unreachable;
+    // 全件が通信エラーなら、リンク切れではなくネットワークを使えない環境とみなす。
+    return { unreachable, offline: urls.length > 0 && networkErrors === urls.length };
 }
 
 export function parseArguments(argv) {
@@ -132,8 +136,10 @@ async function main() {
 
     if (checkLinks) {
         try {
-            const unreachable = await checkLinkReachability(urls);
-            if (unreachable.length === 0) {
+            const { unreachable, offline } = await checkLinkReachability(urls);
+            if (offline) {
+                process.stdout.write(`SKIP: ネットワークへ到達できないため、リンクの到達性を検査しない（対象 ${urls.length} 件）\n`);
+            } else if (unreachable.length === 0) {
                 process.stdout.write(`PASS: Sourcesの${urls.length}件すべてが到達可能\n`);
             } else {
                 for (const entry of unreachable) {

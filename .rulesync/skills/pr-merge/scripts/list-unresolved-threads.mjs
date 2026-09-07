@@ -93,12 +93,14 @@ function runGhCommand({ query, owner, name, number, cursor }) {
     const args = [
         "api", "graphql",
         "-f", `query=${query}`,
-        "-F", `owner=${owner}`,
-        "-F", `name=${name}`,
+        // ownerとnameはGraphQL上でString!である。-F は数値に見える値を整数へ変換するため、
+        // 数字だけの名前で型不整合になる。文字列は -f で渡す。
+        "-f", `owner=${owner}`,
+        "-f", `name=${name}`,
         "-F", `number=${number}`,
     ];
     if (cursor !== null && cursor !== undefined) {
-        args.push("-F", `cursor=${cursor}`);
+        args.push("-f", `cursor=${cursor}`);
     }
 
     const stdout = execFileSync("gh", args, { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });

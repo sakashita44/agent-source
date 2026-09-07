@@ -32,12 +32,26 @@ export function loadData() {
 }
 
 export function stripCodeSpans(line, inFenceObj) {
-  if (/^\s*```/.test(line)) {
-    inFenceObj.value = !inFenceObj.value;
-    return '';
+  // 開始フェンスの文字と長さを記録し、同じ文字で同じ長さ以上の行までを除外する。
+  // 単純なトグルでは、チルダフェンスと、入れ子にしたフェンスを扱えない。
+  if (!inFenceObj.value) {
+    const opening = line.match(/^\s{0,3}(`{3,}|~{3,})/);
+    if (opening) {
+      inFenceObj.value = true;
+      inFenceObj.char = opening[1].charAt(0);
+      inFenceObj.length = opening[1].length;
+      return '';
+    }
+    return line.replace(/`[^`]*`/g, '');
   }
-  if (inFenceObj.value) return '';
-  return line.replace(/`[^`]*`/g, '');
+
+  const closing = new RegExp('^\\s{0,3}' + inFenceObj.char + '{' + inFenceObj.length + ',}\\s*$');
+  if (closing.test(line)) {
+    inFenceObj.value = false;
+    inFenceObj.char = null;
+    inFenceObj.length = 0;
+  }
+  return '';
 }
 
 export function checkKanji(rawText, data) {
