@@ -8,3 +8,6 @@ node_modules/
 .vscode/
 .idea/
 old/
+
+# rulesync fetch で取得する第三者Skill
+.rulesync/skills/natural-japanese/

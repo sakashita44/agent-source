@@ -3,6 +3,8 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, s
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+// イベントの組み合わせと2段構成は https://github.com/u-ichi/compact-plus
+// を参照した。実装は共有していない。
 const STATE_DIR = join(homedir(), ".agent-source", "state", "compact");
 const EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
 

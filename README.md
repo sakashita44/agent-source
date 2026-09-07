@@ -48,6 +48,20 @@ Rulesync は `claudecode`、`codexcli`、`antigravity-ide`、`antigravity-cli` �
 
 `tmp/` は Git の管理対象外であり、検証用ホームと適用前バックアップの保存先として使用される。
 
+## 第三者 Skill の取得
+
+`natural-japanese` は上流のリポジトリから取得して配布する。取得結果は Git の管理対象外であり、複製をこのリポジトリへ置かない。
+
+```powershell
+npx rulesync fetch coji/natural-japanese --ref 9a78a42964096da509b8f3e011f0085a5f080151
+```
+
+- 取得元: <https://github.com/coji/natural-japanese>（MIT）
+- 取得先: `.rulesync/skills/natural-japanese/`
+- 更新するときは、上流の新しいコミット SHA を指定して再取得し、この手順の SHA を書き換える
+
+取得後は `scripts/apply.ps1` が他の Skill と同じ流れで配布する。取得していない環境では、この Skill だけが配布されない。
+
 ## 実行手順
 
 ### 生成差分の確認
