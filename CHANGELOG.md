@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-09-07
+
 ### Added
 
 - Rulesync による配布。Claude Code、Codex CLI、Antigravity IDE、Antigravity CLI の 4 配布先へ、rules、skills、subagents、hooks、MCP 設定をホームディレクトリ単位で配る
@@ -17,4 +19,5 @@
 - 第三者 Skill の宣言的な取得。`rulesync.jsonc` の `sources` で取得元を宣言し、`rulesync.lock` で commit SHA と整合性ハッシュを固定する。本体はこのリポジトリで管理しない
 - 隔離したホームディレクトリへ生成して非破壊性を確かめる検証手順（`scripts/verify.ps1`）と、実ホームへ適用する手順（`scripts/apply.ps1`）
 
-[Unreleased]: https://github.com/sakashita44/agent-source/commits/main
+[Unreleased]: https://github.com/sakashita44/agent-source/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/sakashita44/agent-source/releases/tag/v1.0.0
