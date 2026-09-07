@@ -6,6 +6,8 @@
 
 - Node.js 22 以上
 - Rulesync 16.3.0 以上
+- uv（`natural-japanese` Skillの同梱スクリプトを実行する場合）
+- bash（配布した hook が `~` を含むコマンドを実行する。Windows では Git Bash が該当する）
 
 初回またはlockfile更新後に、リポジトリで固定したRulesyncを導入する。
 
@@ -22,24 +24,46 @@ agent-source/
 ├── .rulesync/
 │   ├── rules/
 │   ├── skills/
+│   ├── subagents/
+│   ├── hooks.jsonc
 │   └── mcp.jsonc
+├── hooks/
 ├── scripts/
 │   ├── apply.ps1
 │   └── verify.ps1
 ├── tmp/
-└── rulesync.jsonc
+├── rulesync.jsonc
+└── rulesync.lock
 ```
 
-- `rulesync.jsonc`: 生成対象と配布する機能を定める
+- `rulesync.jsonc`: 生成対象、配布する機能、外部から取得するSkillの取得元を定める
 - `.rulesync/rules/`: 全環境に共通する規則と、エージェントごとのサブエージェント利用規則を収める
 - `.rulesync/skills/`: 実装、成果物、文章、検証、Git、サブエージェント利用の原則を Skill 単位で収める
 - `.rulesync/mcp.jsonc`: 配布する MCP 設定を定める
+- `.rulesync/subagents/`: ツール制限を伴うサブエージェント定義を収める
+- `.rulesync/hooks.jsonc`: 配布する AI エージェントの hook を定める
+- `hooks/`: hook から呼ぶスクリプトを収める。Rulesync は hook の設定ファイルだけを配るため、`scripts/apply.ps1` が `~/.agent-source/hooks/` へ配置する
 - `scripts/verify.ps1`: 隔離した一時ホームへ生成し、設定の非破壊性と生成結果を検証する
 - `scripts/apply.ps1`: dry-run、旧 Skill のバックアップと限定削除、実ホームへの生成、生成結果の検査を行う
 
-Rulesync は `claudecode`、`codexcli`、`antigravity-ide`、`antigravity-cli` を対象とし、rules、skills、MCP を配布する。
+Rulesync は `claudecode`、`codexcli`、`antigravity-ide`、`antigravity-cli` を対象とし、rules、skills、subagents、hooks、MCP を配布する。hook の対象イベントは `claudecode` と `codexcli` だけが持つため、Antigravity では compact 対策が働かない。
 
 `tmp/` は Git の管理対象外であり、検証用ホームと適用前バックアップの保存先として使用される。
+
+## 第三者 Skill の取得
+
+外部リポジトリの Skill は `rulesync.jsonc` の `sources` で宣言し、取得コマンドで持ち込む。本体はこのリポジトリで管理せず、取得先の ref は `rulesync.lock` が固定する。
+
+```powershell
+npx rulesync install
+```
+
+- 取得先: `.rulesync/skills/.curated/`。Git の管理対象外
+- `rulesync.lock`: 解決した commit SHA と整合性ハッシュを記録する。この 1 ファイルだけを Git で管理する
+- 上流へ追随するときは `npx rulesync install --update` を実行し、更新後の `rulesync.lock` をコミットする
+- CI や再現が要る場面では `npx rulesync install --frozen` を使い、lockfile の ref で取得する
+
+取得後は `scripts/apply.ps1` が他の Skill と同じ流れで配布する。取得していない環境では、宣言した Skill だけが配布されない。
 
 ## 実行手順
 

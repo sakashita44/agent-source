@@ -1,0 +1,42 @@
+{
+  "hooks": {},
+
+  // compact対策。圧縮の直前に状態を書き出し、圧縮後の最初の注入点で読み直しを指示する。
+  // PostCompactは追加コンテキストを返せないため、SessionStartを主経路、UserPromptSubmitを
+  // フォールバックとする。2つのイベントの配送順は配布先で逆になるため、markerと注入済み印を
+  // 相互に見て、どちらの順でも注入がちょうど一度になるようにしている。
+  // スクリプトはrulesyncが運ばない。scripts/apply.ps1が ~/.agent-source/hooks/ へ配る。
+  // Antigravityはこれらのイベントを持たないため、配布しない。
+  "claudecode": {
+    "hooks": {
+      "preCompact": [
+        { "type": "command", "command": "node ~/.agent-source/hooks/compact-hook.mjs save" }
+      ],
+      "postCompact": [
+        { "type": "command", "command": "node ~/.agent-source/hooks/compact-hook.mjs mark" }
+      ],
+      "sessionStart": [
+        { "type": "command", "matcher": "compact", "command": "node ~/.agent-source/hooks/compact-hook.mjs restore" }
+      ],
+      "beforeSubmitPrompt": [
+        { "type": "command", "command": "node ~/.agent-source/hooks/compact-hook.mjs inject" }
+      ]
+    }
+  },
+  "codexcli": {
+    "hooks": {
+      "preCompact": [
+        { "type": "command", "command": "node ~/.agent-source/hooks/compact-hook.mjs save" }
+      ],
+      "postCompact": [
+        { "type": "command", "command": "node ~/.agent-source/hooks/compact-hook.mjs mark" }
+      ],
+      "sessionStart": [
+        { "type": "command", "matcher": "compact", "command": "node ~/.agent-source/hooks/compact-hook.mjs restore" }
+      ],
+      "beforeSubmitPrompt": [
+        { "type": "command", "command": "node ~/.agent-source/hooks/compact-hook.mjs inject" }
+      ]
+    }
+  }
+}

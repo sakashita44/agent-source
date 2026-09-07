@@ -1,4 +1,4 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param(
     [switch]$DryRun
 )
@@ -143,6 +143,23 @@ function Get-TargetHome {
     return (Resolve-Path -LiteralPath $candidate).ProviderPath
 }
 
+function Copy-HookScripts {
+    param(
+        [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+        [Parameter(Mandatory = $true)][string]$TargetHome
+    )
+
+    $source = Join-Path $RepositoryRoot 'hooks'
+    if (-not (Test-Path -LiteralPath $source -PathType Container)) {
+        return
+    }
+
+    # Rulesync は hook の設定ファイルだけを配り、コマンドが指すスクリプトを運ばない。
+    $destination = Join-Path $TargetHome '.agent-source/hooks'
+    New-Item -ItemType Directory -Path $destination -Force | Out-Null
+    Copy-Item -Path (Join-Path $source '*.mjs') -Destination $destination -Force
+    Write-Host "Hook scripts copied to: $destination"
+}
 function Get-SafeTemporaryRoot {
     param([Parameter(Mandatory = $true)][string]$RepositoryRoot)
 
@@ -273,6 +290,7 @@ try {
 
     Invoke-Rulesync -Command $rulesyncCommand -Arguments @('generate', '--global')
     Invoke-Rulesync -Command $rulesyncCommand -Arguments @('generate', '--global', '--check')
+    Copy-HookScripts -RepositoryRoot $repoRoot -TargetHome (Get-TargetHome)
 } catch {
     if ($legacySkillDirectories.Count -gt 0) {
         throw "Rulesync apply failed. Restore the legacy Skill backup to its original relative paths. backup=$backupRoot; error=$_"
