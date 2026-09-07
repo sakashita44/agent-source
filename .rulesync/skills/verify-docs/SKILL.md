@@ -39,7 +39,7 @@ codexcli:
 
 ### 表現と文体
 
-- 正本: `writing-principles`、`references`の`review-examples.md`（`write-docs`が持つ）
+- 正本: `writing-principles`、`write-docs`の`references/review-examples.md`
 - 観点: 簡潔性、用語の一貫性、メタ言及、強調、演出、効能約束、意味上の主体と文法上の主語、指示の終止形、表記、基準時点へ依存する表現、現行仕様と時系列情報の配置、禁止パターン
 - 境界: パターン一致だけで違反とせず、例外と文書種別を正本から判定する
 
