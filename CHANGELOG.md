@@ -1,0 +1,20 @@
+# Changelog
+
+このリポジトリの変更を記録する。
+
+書式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に従い、バージョンは [Semantic Versioning](https://semver.org/lang/ja/) に従う。
+
+## [Unreleased]
+
+### Added
+
+- Rulesync による配布。Claude Code、Codex CLI、Antigravity IDE、Antigravity CLI の 4 配布先へ、rules、skills、subagents、hooks、MCP 設定をホームディレクトリ単位で配る
+- 判断の原則を定める Skill。実装手段の判断ラダーと検討量の配分（`engineering-principles`）、情報と意図の配置（`artifact-principles`）、文章の責務と日本語の文体（`writing-principles`）、検証の選択と完了判定（`verification-principles`）、Git 操作（`git-general`）、委譲（`subagent`）、実行基盤ごとの方式選択（`stack-conventions`）
+- 作業を一続きで扱う Skill。コミット（`commit`）、計画と Issue 分解（`plan`）、要件インタビュー（`grill-me`）、PR のマージ（`pr-merge`）、リリース（`release`）、反復調査（`deep-research`）、文書の執筆（`write-docs`）と検証（`verify-docs`、`verify-manual`）、既存コードの必要性の問い直し（`justify-code`）、コメントの付与（`add-comment`）、外部レビュー（`independent-review`）、開発設定の導入（`setup-project`）
+- 経緯を持たない立場で判断させるサブエージェント。計画から検討の経緯を落とす `purify-artifact`、実装していない立場でコメントの内容を決める `write-comments`
+- 会話の圧縮に対する復旧 hook。圧縮の直前に状態を書き出し、圧縮後の最初の注入点で読み直しを指示する。Claude Code と Codex CLI へ配る
+- 決定的な検査を行う Node スクリプト。文書の構造、リンク、常用漢字表外字、調査レポートのソース数と文中引用、未解決レビュースレッドの抽出
+- 第三者 Skill の宣言的な取得。`rulesync.jsonc` の `sources` で取得元を宣言し、`rulesync.lock` で commit SHA と整合性ハッシュを固定する。本体はこのリポジトリで管理しない
+- 隔離したホームディレクトリへ生成して非破壊性を確かめる検証手順（`scripts/verify.ps1`）と、実ホームへ適用する手順（`scripts/apply.ps1`）
+
+[Unreleased]: https://github.com/sakashita44/agent-source/commits/main
