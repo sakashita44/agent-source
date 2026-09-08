@@ -32,6 +32,8 @@ agent-source/
 │   ├── apply.ps1
 │   └── verify.ps1
 ├── tmp/
+├── AGENTS.md
+├── CLAUDE.md
 ├── rulesync.jsonc
 └── rulesync.lock
 ```
@@ -45,6 +47,8 @@ agent-source/
 - `hooks/`: hook から呼ぶスクリプトを収める。Rulesync は hook の設定ファイルだけを配るため、`scripts/apply.ps1` が `~/.agent-source/hooks/` へ配置する
 - `scripts/verify.ps1`: 隔離した一時ホームへ生成し、設定の非破壊性と生成結果を検証する
 - `scripts/apply.ps1`: dry-run、旧 Skill のバックアップと限定削除、実ホームへの生成、生成結果の検査を行う
+- `AGENTS.md`: このリポジトリで作業するエージェント向けに、正本と生成物の区別、生成と適用の手段、Git 管理外ディレクトリの扱いを定める
+- `CLAUDE.md`: `AGENTS.md` を import する 1 行だけを持つ。Claude Code は `AGENTS.md` を読まないため、同じ内容を届ける
 
 Rulesync は `claudecode`、`codexcli`、`antigravity-ide`、`antigravity-cli` を対象とし、rules、skills、subagents、hooks、MCP を配布する。hook の対象イベントは `claudecode` と `codexcli` だけが持つため、Antigravity では compact 対策が働かない。
 
