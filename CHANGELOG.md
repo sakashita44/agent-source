@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-18
+
 ### Added
 
 - サブエージェント委譲のタイムアウト指定基準（`subagent`）。委譲先の起動手段がタイムアウトまたは待機時間の指定を受け付ける場合、想定所要時間の 3 倍以上、想定が困難な場合は既定の 10 分を基準とする。組み込みの Agent 起動、CLI 実行、CLI をラップするコマンドの待機時間設定など、起動手段を問わず適用する
@@ -36,5 +38,6 @@
 - 第三者 Skill の宣言的な取得。`rulesync.jsonc` の `sources` で取得元を宣言し、`rulesync.lock` で commit SHA と整合性ハッシュを固定する。本体はこのリポジトリで管理しない
 - 隔離したホームディレクトリへ生成して非破壊性を確認する検証手順（`scripts/verify.ps1`）と、実際のホームディレクトリへ適用する手順（`scripts/apply.ps1`）
 
-[Unreleased]: https://github.com/sakashita44/agent-source/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/sakashita44/agent-source/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/sakashita44/agent-source/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/sakashita44/agent-source/releases/tag/v1.0.0
