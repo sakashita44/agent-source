@@ -9,4 +9,4 @@ targets:
 
 Web 調査では、headless mode が `read_url` の許可を要求し、確認できないまま自動拒否する場合がある。出力に `read_url permission` または `auto-denied` が現れた場合は調査結果なしとして扱い、権限拒否を原因として報告する。
 
-`--dangerously-skip-permissions` は `read_url` だけでなく全 tool の権限確認を省略するため、読み取り専用指定と同義ではない。外側の隔離と明示的な許可がある場合だけ使用する。特定 tool だけを許可できる設定が利用可能なら、その限定設定を優先する。
+`--dangerously-skip-permissions` は `read_url` だけでなく全 tool の権限確認を省略するため、読み取り専用指定と同義ではない。外部で隔離された環境と明示的な許可がある場合だけ使用する。特定 tool だけを許可できる設定が利用可能なら、その限定設定を優先する。
