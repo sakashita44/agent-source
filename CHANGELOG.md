@@ -21,7 +21,7 @@
 ### Fixed
 
 - Windows 版 Codex で導入済みの `agy` を未導入と判定する問題（`03-subagent-codex.md`）。コマンド名の解決に失敗した場合は、`PATH` の各ディレクトリから `agy.exe` の候補パスを組み立てて存在を確認し、見つかった最初の候補を絶対パスで起動する。候補を確認できない場合に限り、ユーザーへ絶対パスを確認する
-- Windows 版 Codex で compact 対策の hook が実行されない問題（`hooks.jsonc`）。Codex 向けの各 hook に、node がユーザーのホームディレクトリからスクリプトを解決する `commandWindows` を併記する。このコマンドは PowerShell と cmd.exe のどちらでも動作する。`verify.ps1` で、Codex 向けに `commandWindows` が生成されること、Claude Code 向けに含まれないことを検査する
+- Windows 版 Codex で compact 対策の hook が実行されない問題（`hooks.jsonc`）。Codex 向けの各 hook に、node がユーザーのホームディレクトリからスクリプトを解決する `commandWindows` を併記する。このコマンドは PowerShell と cmd.exe のどちらでも動作する
 
 ## [1.1.0] - 2026-09-18
 

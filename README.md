@@ -49,7 +49,7 @@ agent-source/
 - `AGENTS.md`: このリポジトリで作業するエージェント向けに、編集対象と生成されたファイルの区別、生成と適用の手段、Git 管理外ディレクトリの扱いを記載する
 - `CLAUDE.md`: `AGENTS.md` を import する 1 行のみで構成する。これにより、`AGENTS.md` を読み込まない Claude Code にも同じ内容を反映できる
 
-Rulesync は `claudecode`、`codexcli`、`antigravity-ide`、`antigravity-cli` を対象とし、rules、skills、subagents、hooks、MCP を配布する。配布する hook は、会話履歴の圧縮に備えて状態を書き出し、圧縮後に再度読み込ませる。この hook が利用する対象イベントに対応しているのは `claudecode` と `codexcli` のみであり、Antigravity では圧縮対策が機能しない。Windows では、Claude Code は自身が解決した Git Bash で hook を実行する。Codex は Windows 専用のコマンドを実行し、node がユーザーのホームディレクトリから hook のスクリプトを解決する。このコマンドは PowerShell と cmd.exe のどちらでも動作する。
+Rulesync は `claudecode`、`codexcli`、`antigravity-ide`、`antigravity-cli` を対象とし、rules、skills、subagents、hooks、MCP を配布する。
 
 `tmp/` は Git の管理対象外であり、検証用のホームディレクトリおよび適用前バックアップの保存先として使用する。
 
@@ -110,7 +110,7 @@ Rulesync の生成挙動を利用中のホームディレクトリから分離�
 ./scripts/verify.ps1
 ```
 
-`verify.ps1` は `tmp/home` の安全境界を確認し、strict doctor、dry-run、生成、check を実行する。既存の `.claude.json` を模した設定において未知のキーが保持されることも検査する。hook の生成結果では、Codex 向けの各 hook に共通コマンドと Windows 専用コマンドが併記されること、Claude Code 向けの hook に Codex 専用の設定が含まれないことを検査する。すべての検査が成功すると、`Verification completed. Test home: <path>` と表示する。失敗した場合は、表示された原因を解消してから同じコマンドを再実行すること。
+`verify.ps1` は `tmp/home` の安全境界を確認し、strict doctor、dry-run、生成、check を実行する。既存の `.claude.json` を模した設定において未知のキーが保持されることも検査する。すべての検査が成功すると、`Verification completed. Test home: <path>` と表示する。失敗した場合は、表示された原因を解消してから同じコマンドを再実行すること。
 
 ### 失敗時の確認
 
