@@ -23,19 +23,40 @@
       ]
     }
   },
+  // Windows 版 Codex は hook を PowerShell（取得できない場合は cmd.exe）で実行し、`~` を展開しない。
+  // 環境変数の参照構文はシェルごとに異なるため、commandWindows ではnodeがos.homedir()からスクリプトを
+  // 解決し、argv[1]へ補ってからimportする。シェルが解釈する`$`や`%`を含めず、どちらのシェルでも同じ文字列で動く。
+  // Claude Code は自身が解決した Git Bash で実行するため、commandWindows を定義しない。
   "codexcli": {
     "hooks": {
       "preCompact": [
-        { "type": "command", "command": "node ~/.agent-source/hooks/compact-hook.mjs save" }
+        {
+          "type": "command",
+          "command": "node ~/.agent-source/hooks/compact-hook.mjs save",
+          "commandWindows": "node -e \"const p=require('path').join(require('os').homedir(),'.agent-source','hooks','compact-hook.mjs');process.argv.splice(1,0,p);import(require('url').pathToFileURL(p).href)\" save"
+        }
       ],
       "postCompact": [
-        { "type": "command", "command": "node ~/.agent-source/hooks/compact-hook.mjs mark" }
+        {
+          "type": "command",
+          "command": "node ~/.agent-source/hooks/compact-hook.mjs mark",
+          "commandWindows": "node -e \"const p=require('path').join(require('os').homedir(),'.agent-source','hooks','compact-hook.mjs');process.argv.splice(1,0,p);import(require('url').pathToFileURL(p).href)\" mark"
+        }
       ],
       "sessionStart": [
-        { "type": "command", "matcher": "compact", "command": "node ~/.agent-source/hooks/compact-hook.mjs restore" }
+        {
+          "type": "command",
+          "matcher": "compact",
+          "command": "node ~/.agent-source/hooks/compact-hook.mjs restore",
+          "commandWindows": "node -e \"const p=require('path').join(require('os').homedir(),'.agent-source','hooks','compact-hook.mjs');process.argv.splice(1,0,p);import(require('url').pathToFileURL(p).href)\" restore"
+        }
       ],
       "beforeSubmitPrompt": [
-        { "type": "command", "command": "node ~/.agent-source/hooks/compact-hook.mjs inject" }
+        {
+          "type": "command",
+          "command": "node ~/.agent-source/hooks/compact-hook.mjs inject",
+          "commandWindows": "node -e \"const p=require('path').join(require('os').homedir(),'.agent-source','hooks','compact-hook.mjs');process.argv.splice(1,0,p);import(require('url').pathToFileURL(p).href)\" inject"
+        }
       ]
     }
   }

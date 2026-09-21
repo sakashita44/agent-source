@@ -7,7 +7,6 @@
 - Node.js 22 以上
 - Rulesync 16.3.0 以上
 - uv（`natural-japanese` Skill の同梱スクリプトを実行する場合）
-- bash（配布した hook が `~` を含むコマンドを実行するため。Windows では Git Bash が該当する）
 
 初回セットアップ時、または lockfile の更新後に、リポジトリで固定された Rulesync を導入する。
 
@@ -50,7 +49,7 @@ agent-source/
 - `AGENTS.md`: このリポジトリで作業するエージェント向けに、編集対象と生成されたファイルの区別、生成と適用の手段、Git 管理外ディレクトリの扱いを記載する
 - `CLAUDE.md`: `AGENTS.md` を import する 1 行のみで構成する。これにより、`AGENTS.md` を読み込まない Claude Code にも同じ内容を反映できる
 
-Rulesync は `claudecode`、`codexcli`、`antigravity-ide`、`antigravity-cli` を対象とし、rules、skills、subagents、hooks、MCP を配布する。配布する hook は、会話履歴の圧縮に備えて状態を書き出し、圧縮後に再度読み込ませる。この hook が利用する対象イベントに対応しているのは `claudecode` と `codexcli` のみであり、Antigravity では圧縮対策が機能しない。
+Rulesync は `claudecode`、`codexcli`、`antigravity-ide`、`antigravity-cli` を対象とし、rules、skills、subagents、hooks、MCP を配布する。
 
 `tmp/` は Git の管理対象外であり、検証用のホームディレクトリおよび適用前バックアップの保存先として使用する。
 
@@ -83,7 +82,7 @@ strict doctor と dry-run が成功すると、`Dry-run completed.` と表示し
 
 ### 利用中のホームディレクトリへの適用
 
-実行前に「生成差分の確認」が成功し、生成内容が意図した状態であることを確認すること。`apply.ps1` は手動配置の Skill をバックアップして削除し、Rulesync の生成結果を利用中のホームディレクトリへ反映する。バックアップ対象は手動配置の Skill のみであり、Rulesync が生成する rules、MCP 設定、Skill は含まない。生成先に残す必要がある状態は、Git または別のバックアップで復元できるように準備してから実行すること。
+実行前に「生成差分の確認」が成功し、生成内容が意図した状態であることを確認すること。`apply.ps1` は手動配置の Skill をバックアップして削除し、Rulesync の生成結果を利用中のホームディレクトリへ反映する。バックアップ対象は手動配置の Skill のみであり、Rulesync が生成する rules、MCP 設定、Skill は含まない。生成先に残す必要がある状態は、Git または別のバックアップで復元できるように準備してから実行すること。一部のエージェントは実行環境の環境変数を上書きするため、実環境への適用はエージェント内から行わず、通常の PowerShell から実行する。
 
 ```powershell
 ./scripts/apply.ps1
