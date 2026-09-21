@@ -23,19 +23,39 @@
       ]
     }
   },
+  // Windows 版 Codex は hook を PowerShell（取得できない場合は cmd.exe）で実行し、`~` を展開しない。
+  // PowerShell の実行に合わせ、commandWindows で USERPROFILE からスクリプトを解決する。
+  // Claude Code は自身が解決した Git Bash で実行するため、commandWindows を定義しない。
   "codexcli": {
     "hooks": {
       "preCompact": [
-        { "type": "command", "command": "node ~/.agent-source/hooks/compact-hook.mjs save" }
+        {
+          "type": "command",
+          "command": "node ~/.agent-source/hooks/compact-hook.mjs save",
+          "commandWindows": "node \"$env:USERPROFILE\\.agent-source\\hooks\\compact-hook.mjs\" save"
+        }
       ],
       "postCompact": [
-        { "type": "command", "command": "node ~/.agent-source/hooks/compact-hook.mjs mark" }
+        {
+          "type": "command",
+          "command": "node ~/.agent-source/hooks/compact-hook.mjs mark",
+          "commandWindows": "node \"$env:USERPROFILE\\.agent-source\\hooks\\compact-hook.mjs\" mark"
+        }
       ],
       "sessionStart": [
-        { "type": "command", "matcher": "compact", "command": "node ~/.agent-source/hooks/compact-hook.mjs restore" }
+        {
+          "type": "command",
+          "matcher": "compact",
+          "command": "node ~/.agent-source/hooks/compact-hook.mjs restore",
+          "commandWindows": "node \"$env:USERPROFILE\\.agent-source\\hooks\\compact-hook.mjs\" restore"
+        }
       ],
       "beforeSubmitPrompt": [
-        { "type": "command", "command": "node ~/.agent-source/hooks/compact-hook.mjs inject" }
+        {
+          "type": "command",
+          "command": "node ~/.agent-source/hooks/compact-hook.mjs inject",
+          "commandWindows": "node \"$env:USERPROFILE\\.agent-source\\hooks\\compact-hook.mjs\" inject"
+        }
       ]
     }
   }
