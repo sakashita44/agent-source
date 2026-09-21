@@ -92,7 +92,8 @@ function Assert-CompactHookCommands {
 
     $modes = @{ PreCompact = 'save'; PostCompact = 'mark'; SessionStart = 'restore'; UserPromptSubmit = 'inject' }
 
-    # Codex は Windows で hook を PowerShell 経由で実行し、`~` を展開しないため、Windows 専用コマンドの併記を検査する。
+    # Codex は Windows で hook を PowerShell または cmd.exe 経由で実行し、`~` を展開しないため、Windows 専用コマンドの併記を検査する。
+    $windowsLoader = 'node -e "const p=require(''path'').join(require(''os'').homedir(),''.agent-source'',''hooks'',''compact-hook.mjs'');process.argv.splice(1,0,p);import(require(''url'').pathToFileURL(p).href)"'
     $codexHooks = Get-GeneratedHookCommands -Path (Join-Path $TestHome '.codex/hooks.json')
     foreach ($eventName in $modes.Keys) {
         $mode = $modes[$eventName]
@@ -104,7 +105,7 @@ function Assert-CompactHookCommands {
         if ($hook.command -ne $expectedCommand) {
             throw "Codex $eventName command changed: $($hook.command)"
         }
-        $expectedWindowsCommand = "node `"`$env:USERPROFILE\.agent-source\hooks\compact-hook.mjs`" $mode"
+        $expectedWindowsCommand = "$windowsLoader $mode"
         if (-not $hook.PSObject.Properties['commandWindows'] -or $hook.commandWindows -ne $expectedWindowsCommand) {
             throw "Codex $eventName commandWindows is missing or unexpected."
         }
