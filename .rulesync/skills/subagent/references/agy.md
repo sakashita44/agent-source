@@ -19,12 +19,15 @@
 
 ### PowerShell での起動構文
 
-プロンプトを変数に読み込み、空でないことを確認して引数として渡す。以下は説明用のコード例であり、`<prompt-file>` と `<選んだモデルID>` を実際の値に置き換えて実行する。
+実行ファイルとプロンプトを変数に読み込み、プロンプトが空でないことを確認して呼び出し演算子 `&` で起動する。以下は説明用のコード例であり、`<agy-executable>`、`<prompt-file>`、`<選んだモデルID>` を実際の値に置き換えて実行する。
+
+`<agy-executable>` には、コマンド名で解決できる環境では `agy` を、解決できない環境では解決した `agy.exe` の絶対パスを指定する。実行環境に配布されたルールが解決手順を定めている場合は、その手順に従う。
 
 ```powershell
+$agy = '<agy-executable>'
 $prompt = Get-Content '<prompt-file>' -Raw
 if ([string]::IsNullOrWhiteSpace($prompt)) { throw 'prompt is empty' }
-agy -p $prompt --model '<選んだモデルID>' --effort high --print-timeout 20m --dangerously-skip-permissions
+& $agy -p $prompt --model '<選んだモデルID>' --effort high --print-timeout 20m --dangerously-skip-permissions
 ```
 
 ## 実行時権限の指定
