@@ -68,6 +68,61 @@ function Assert-NoNestedReparsePoint {
     }
 }
 
+function Get-GeneratedHookCommands {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        throw "Generated hook configuration was not found: $Path"
+    }
+
+    $hooks = (Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json).hooks
+    $commands = @{}
+    foreach ($eventProperty in $hooks.PSObject.Properties) {
+        foreach ($group in $eventProperty.Value) {
+            foreach ($hook in $group.hooks) {
+                $commands[$eventProperty.Name] = $hook
+            }
+        }
+    }
+    return $commands
+}
+
+function Assert-CompactHookCommands {
+    param([Parameter(Mandatory = $true)][string]$TestHome)
+
+    $modes = @{ PreCompact = 'save'; PostCompact = 'mark'; SessionStart = 'restore'; UserPromptSubmit = 'inject' }
+
+    # Codex は Windows で hook を PowerShell 経由で実行し、`~` を展開しないため、Windows 専用コマンドの併記を検査する。
+    $codexHooks = Get-GeneratedHookCommands -Path (Join-Path $TestHome '.codex/hooks.json')
+    foreach ($eventName in $modes.Keys) {
+        $mode = $modes[$eventName]
+        $hook = $codexHooks[$eventName]
+        if (-not $hook) {
+            throw "Codex hook is missing: $eventName"
+        }
+        $expectedCommand = "node ~/.agent-source/hooks/compact-hook.mjs $mode"
+        if ($hook.command -ne $expectedCommand) {
+            throw "Codex $eventName command changed: $($hook.command)"
+        }
+        $expectedWindowsCommand = "node `"`$env:USERPROFILE\.agent-source\hooks\compact-hook.mjs`" $mode"
+        if (-not $hook.PSObject.Properties['commandWindows'] -or $hook.commandWindows -ne $expectedWindowsCommand) {
+            throw "Codex $eventName commandWindows is missing or unexpected."
+        }
+    }
+
+    # Claude Code は自身が解決する shell で実行するため、Codex 専用フィールドが含まれないことを検査する。
+    $claudeHooks = Get-GeneratedHookCommands -Path (Join-Path $TestHome '.claude/settings.json')
+    foreach ($eventName in $modes.Keys) {
+        $hook = $claudeHooks[$eventName]
+        if (-not $hook) {
+            throw "Claude Code hook is missing: $eventName"
+        }
+        if ($hook.PSObject.Properties['commandWindows']) {
+            throw "Claude Code $eventName hook contains the Codex-only commandWindows field."
+        }
+    }
+}
+
 Assert-CommandExists -Name 'node'
 $rulesyncCommand = Resolve-RulesyncCommand -RepositoryRoot $repoRoot
 Set-Location -LiteralPath $repoRoot
@@ -107,6 +162,7 @@ try {
     Invoke-Rulesync -Command $rulesyncCommand -Arguments @('generate', '--global', '--dry-run')
     Invoke-Rulesync -Command $rulesyncCommand -Arguments @('generate', '--global')
     Invoke-Rulesync -Command $rulesyncCommand -Arguments @('generate', '--global', '--check')
+    Assert-CompactHookCommands -TestHome $testHome
 
     # Rulesync は hook の設定ファイルだけを配るため、スクリプトの配置は apply.ps1 と同じ手順で確かめる。
     $hookSource = Join-Path $repoRoot 'hooks'
