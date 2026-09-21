@@ -49,7 +49,7 @@ agent-source/
 - `AGENTS.md`: このリポジトリで作業するエージェント向けに、編集対象と生成されたファイルの区別、生成と適用の手段、Git 管理外ディレクトリの扱いを記載する
 - `CLAUDE.md`: `AGENTS.md` を import する 1 行のみで構成する。これにより、`AGENTS.md` を読み込まない Claude Code にも同じ内容を反映できる
 
-Rulesync は `claudecode`、`codexcli`、`antigravity-ide`、`antigravity-cli` を対象とし、rules、skills、subagents、hooks、MCP を配布する。配布する hook は、会話履歴の圧縮に備えて状態を書き出し、圧縮後に再度読み込ませる。この hook が利用する対象イベントに対応しているのは `claudecode` と `codexcli` のみであり、Antigravity では圧縮対策が機能しない。Windows では、Claude Code は自身が解決した Git Bash で hook を実行する。Codex は Windows 専用コマンドを PowerShell で実行し、`USERPROFILE` から hook のスクリプトを解決する。
+Rulesync は `claudecode`、`codexcli`、`antigravity-ide`、`antigravity-cli` を対象とし、rules、skills、subagents、hooks、MCP を配布する。配布する hook は、会話履歴の圧縮に備えて状態を書き出し、圧縮後に再度読み込ませる。この hook が利用する対象イベントに対応しているのは `claudecode` と `codexcli` のみであり、Antigravity では圧縮対策が機能しない。Windows では、Claude Code は自身が解決した Git Bash で hook を実行する。Codex は Windows 専用のコマンドを実行し、node がユーザーのホームディレクトリから hook のスクリプトを解決する。このコマンドは PowerShell と cmd.exe のどちらでも動作する。
 
 `tmp/` は Git の管理対象外であり、検証用のホームディレクトリおよび適用前バックアップの保存先として使用する。
 
