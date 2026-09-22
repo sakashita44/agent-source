@@ -2,6 +2,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2.0
 
 $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+. (Join-Path $PSScriptRoot 'clear-curated-skill-python-cache.ps1')
 
 function Assert-CommandExists {
     param([Parameter(Mandatory = $true)][string]$Name)
@@ -71,6 +72,7 @@ function Assert-NoNestedReparsePoint {
 Assert-CommandExists -Name 'node'
 $rulesyncCommand = Resolve-RulesyncCommand -RepositoryRoot $repoRoot
 Set-Location -LiteralPath $repoRoot
+Clear-CuratedSkillPythonCache -CuratedRoot (Join-Path $repoRoot '.rulesync\skills\.curated')
 
 $temporaryRoot = Join-Path $repoRoot 'tmp'
 New-Item -ItemType Directory -Path $temporaryRoot -Force | Out-Null
