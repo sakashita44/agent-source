@@ -24,6 +24,7 @@
 
 ### Fixed
 
+- 第三者 Skill の実行で生じた Python キャッシュが配布される問題。`apply.ps1` と `verify.ps1` は生成前に `.rulesync/skills/.curated/` 内の `__pycache__`、`*.pyc`、`*.pyo` を削除する
 - Windows 版 Codex で導入済みの `agy` を未導入と判定する問題（`03-subagent-codex.md`）。コマンド名の解決に失敗した場合は、`PATH` の各ディレクトリから `agy.exe` の候補パスを組み立てて存在を確認し、見つかった最初の候補を絶対パスで起動する。候補を確認できない場合に限り、ユーザーへ絶対パスを確認する
 - Windows 版 Codex で compact 対策の hook が実行されない問題（`hooks.jsonc`）。Codex 向けの各 hook に、node がユーザーのホームディレクトリからスクリプトを解決する `commandWindows` を併記する。このコマンドは PowerShell と cmd.exe のどちらでも動作する
 

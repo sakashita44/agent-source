@@ -66,7 +66,7 @@ npx rulesync install
 - 上流へ追従する際は `npx rulesync install --update` を実行し、更新後の `rulesync.lock` をコミットする
 - CI や再現性が必要な場面では `npx rulesync install --frozen` を使い、lockfile に固定された ref を指定して取得する
 
-取得後は `scripts/apply.ps1` が他の Skill と同様の流れで配布する。取得していない環境では、定義した Skill のみが配布されない。
+取得後は `scripts/apply.ps1` が他の Skill と同様の流れで配布する。`apply.ps1` と `verify.ps1` は生成前に `.rulesync/skills/.curated/` 内の `__pycache__`、`*.pyc`、`*.pyo` を削除する。この削除は dry-run でも実行する。取得していない環境では、定義した Skill のみが配布されない。
 
 ## 実行手順
 
