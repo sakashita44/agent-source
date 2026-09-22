@@ -7,7 +7,7 @@ import { join } from "node:path";
 // https://github.com/u-ichi/compact-plus を参照した。実装は共有していない。
 // Claude CodeはSessionStartをPostCompactより先に配送し、Codexは逆になる。
 // どちらの順でも一度だけ注入するため、markerと注入済み印を相互に消費する。
-const DEFAULT_DIR = join(homedir(), ".agent-source", "state", "compact");
+const DEFAULT_DIR = join(homedir(), ".local", "agent-source", "state", "compact");
 const EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
 
 export function stateKey(input) {

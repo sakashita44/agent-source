@@ -113,7 +113,7 @@ try {
     # Rulesync は hook の設定ファイルだけを配るため、スクリプトの配置は apply.ps1 と同じ手順で確かめる。
     $hookSource = Join-Path $repoRoot 'hooks'
     if (Test-Path -LiteralPath $hookSource -PathType Container) {
-        $hookDestination = Join-Path $testHome '.agent-source/hooks'
+        $hookDestination = Join-Path $testHome '.local/agent-source/hooks'
         New-Item -ItemType Directory -Path $hookDestination -Force | Out-Null
         Copy-Item -Path (Join-Path $hookSource '*.mjs') -Destination $hookDestination -Force
         if (-not (Test-Path -LiteralPath (Join-Path $hookDestination 'compact-hook.mjs') -PathType Leaf)) {
