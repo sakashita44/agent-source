@@ -43,7 +43,7 @@ agent-source/
 - `.rulesync/mcp.jsonc`: 配布する MCP 設定を定義する
 - `.rulesync/subagents/`: ツール制限を伴うサブエージェント定義を格納する
 - `.rulesync/hooks.jsonc`: 配布する AI エージェントの hook を定義する
-- `hooks/`: hook から呼び出すスクリプトを格納する。Rulesync は hook の設定ファイルのみを配布するため、`scripts/apply.ps1` が `~/.agent-source/hooks/` へ配置する
+- `hooks/`: hook から呼び出すスクリプトを格納する。Rulesync は hook の設定ファイルのみを配布するため、`scripts/apply.ps1` が `~/.local/agent-source/hooks/` へ配置する
 - `scripts/verify.ps1`: 隔離した一時的なホームディレクトリへ生成し、設定の非破壊性と生成結果を検証する
 - `scripts/apply.ps1`: dry-run、Rulesync への移行前に手作業で配置していた Skill（以下、手動配置の Skill）のバックアップと対象を絞った削除、利用中のホームディレクトリへの生成、生成結果の検査を行う
 - `AGENTS.md`: このリポジトリで作業するエージェント向けに、編集対象と生成されたファイルの区別、生成と適用の手段、Git 管理外ディレクトリの扱いを記載する

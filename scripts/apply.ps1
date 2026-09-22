@@ -156,7 +156,7 @@ function Copy-HookScripts {
     }
 
     # Rulesync は hook の設定ファイルだけを配り、コマンドが指すスクリプトを運ばない。
-    $destination = Join-Path $TargetHome '.agent-source/hooks'
+    $destination = Join-Path $TargetHome '.local/agent-source/hooks'
     New-Item -ItemType Directory -Path $destination -Force | Out-Null
     Copy-Item -Path (Join-Path $source '*.mjs') -Destination $destination -Force
     Write-Host "Hook scripts copied to: $destination"

@@ -5,21 +5,21 @@
   // PostCompactは追加コンテキストを返せないため、SessionStartを主経路、UserPromptSubmitを
   // フォールバックとする。2つのイベントの配送順は配布先で逆になるため、markerと注入済み印を
   // 相互に見て、どちらの順でも注入がちょうど一度になるようにしている。
-  // スクリプトはrulesyncが運ばない。scripts/apply.ps1が ~/.agent-source/hooks/ へ配る。
+  // スクリプトはrulesyncが運ばない。scripts/apply.ps1が ~/.local/agent-source/hooks/ へ配る。
   // Antigravityはこれらのイベントを持たないため、配布しない。
   "claudecode": {
     "hooks": {
       "preCompact": [
-        { "type": "command", "command": "node ~/.agent-source/hooks/compact-hook.mjs save" }
+        { "type": "command", "command": "node ~/.local/agent-source/hooks/compact-hook.mjs save" }
       ],
       "postCompact": [
-        { "type": "command", "command": "node ~/.agent-source/hooks/compact-hook.mjs mark" }
+        { "type": "command", "command": "node ~/.local/agent-source/hooks/compact-hook.mjs mark" }
       ],
       "sessionStart": [
-        { "type": "command", "matcher": "compact", "command": "node ~/.agent-source/hooks/compact-hook.mjs restore" }
+        { "type": "command", "matcher": "compact", "command": "node ~/.local/agent-source/hooks/compact-hook.mjs restore" }
       ],
       "beforeSubmitPrompt": [
-        { "type": "command", "command": "node ~/.agent-source/hooks/compact-hook.mjs inject" }
+        { "type": "command", "command": "node ~/.local/agent-source/hooks/compact-hook.mjs inject" }
       ]
     }
   },
@@ -32,30 +32,30 @@
       "preCompact": [
         {
           "type": "command",
-          "command": "node ~/.agent-source/hooks/compact-hook.mjs save",
-          "commandWindows": "node -e \"const p=require('path').join(require('os').homedir(),'.agent-source','hooks','compact-hook.mjs');process.argv.splice(1,0,p);import(require('url').pathToFileURL(p).href)\" save"
+          "command": "node ~/.local/agent-source/hooks/compact-hook.mjs save",
+          "commandWindows": "node -e \"const p=require('path').join(require('os').homedir(),'.local','agent-source','hooks','compact-hook.mjs');process.argv.splice(1,0,p);import(require('url').pathToFileURL(p).href)\" save"
         }
       ],
       "postCompact": [
         {
           "type": "command",
-          "command": "node ~/.agent-source/hooks/compact-hook.mjs mark",
-          "commandWindows": "node -e \"const p=require('path').join(require('os').homedir(),'.agent-source','hooks','compact-hook.mjs');process.argv.splice(1,0,p);import(require('url').pathToFileURL(p).href)\" mark"
+          "command": "node ~/.local/agent-source/hooks/compact-hook.mjs mark",
+          "commandWindows": "node -e \"const p=require('path').join(require('os').homedir(),'.local','agent-source','hooks','compact-hook.mjs');process.argv.splice(1,0,p);import(require('url').pathToFileURL(p).href)\" mark"
         }
       ],
       "sessionStart": [
         {
           "type": "command",
           "matcher": "compact",
-          "command": "node ~/.agent-source/hooks/compact-hook.mjs restore",
-          "commandWindows": "node -e \"const p=require('path').join(require('os').homedir(),'.agent-source','hooks','compact-hook.mjs');process.argv.splice(1,0,p);import(require('url').pathToFileURL(p).href)\" restore"
+          "command": "node ~/.local/agent-source/hooks/compact-hook.mjs restore",
+          "commandWindows": "node -e \"const p=require('path').join(require('os').homedir(),'.local','agent-source','hooks','compact-hook.mjs');process.argv.splice(1,0,p);import(require('url').pathToFileURL(p).href)\" restore"
         }
       ],
       "beforeSubmitPrompt": [
         {
           "type": "command",
-          "command": "node ~/.agent-source/hooks/compact-hook.mjs inject",
-          "commandWindows": "node -e \"const p=require('path').join(require('os').homedir(),'.agent-source','hooks','compact-hook.mjs');process.argv.splice(1,0,p);import(require('url').pathToFileURL(p).href)\" inject"
+          "command": "node ~/.local/agent-source/hooks/compact-hook.mjs inject",
+          "commandWindows": "node -e \"const p=require('path').join(require('os').homedir(),'.local','agent-source','hooks','compact-hook.mjs');process.argv.splice(1,0,p);import(require('url').pathToFileURL(p).href)\" inject"
         }
       ]
     }
