@@ -106,6 +106,28 @@ test("urlを含まない脚注定義を報告する", () => {
     assert.deepEqual(findFootnoteProblems(markdown), { undefinedReferences: [], definitionsWithoutUrl: ["1"] });
 });
 
+test("コードブロックとインラインコード内の脚注記法を参照として扱わない", () => {
+    const markdown = [
+        "## 背景",
+        "正規表現 `[^a-z]` を使う[^1]。",
+        "```sh",
+        "grep '[^0-9]' file",
+        "```",
+        "~~~",
+        "[^x]",
+        "~~~",
+        "",
+        "## Sources",
+        "[^1]: https://example.invalid/a",
+    ].join("\n");
+    assert.deepEqual(findFootnoteProblems(markdown), { undefinedReferences: [], definitionsWithoutUrl: [] });
+});
+
+test("コード内のurlだけを持つセクションを引用なしとして報告する", () => {
+    const markdown = "## 背景\n`https://example.invalid/a` を呼び出す。\n\n## Sources\n- https://example.invalid/a\n";
+    assert.deepEqual(findSectionsWithoutCitation(markdown), ["背景"]);
+});
+
 test("未定義の脚注だけを持つセクションを引用なしとして報告する", () => {
     const markdown = "## 背景\n事実である[^9]。\n\n## Sources\n[^1]: https://example.invalid/a\n";
     assert.deepEqual(findSectionsWithoutCitation(markdown), ["背景"]);

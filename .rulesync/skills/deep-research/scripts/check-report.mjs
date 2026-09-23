@@ -43,6 +43,22 @@ function bodyLines(markdown) {
     return splitSections(markdown).filter((section) => !isSourcesSection(section)).flatMap((section) => section.lines);
 }
 
+function withoutCode(lines) {
+    let fence = null;
+    return lines.map((line) => {
+        const marker = line.match(/^\s*(```|~~~)/)?.[1];
+        if (fence === null && marker) {
+            fence = marker;
+            return "";
+        }
+        if (fence !== null) {
+            if (marker === fence) fence = null;
+            return "";
+        }
+        return line.replace(/`[^`]*`/g, "");
+    });
+}
+
 function findUrls(line) {
     return (line.match(URL_PATTERN) ?? []).map(trimTrailingPunctuation);
 }
@@ -115,7 +131,7 @@ function collectFootnoteDefinitions(markdown) {
 export function findFootnoteProblems(markdown) {
     const definitions = collectFootnoteDefinitions(markdown);
     const undefinedReferences = new Set();
-    for (const line of bodyLines(markdown)) {
+    for (const line of withoutCode(bodyLines(markdown))) {
         for (const [, id] of line.matchAll(FOOTNOTE_REFERENCE_PATTERN)) {
             if (!definitions.has(id)) undefinedReferences.add(id);
         }
@@ -131,7 +147,7 @@ export function findSectionsWithoutCitation(markdown) {
     return splitSections(markdown)
         .filter((section) => section.heading !== null && !EXCLUDED_SECTION_PATTERN.test(section.heading))
         // 出典は脚注と文中リンクのどちらの形式でもよいため、urlがあれば引用ありとみなす。
-        .filter((section) => !section.lines.some((line) => citesResolvedFootnote(line) || /https?:\/\//.test(line)))
+        .filter((section) => !withoutCode(section.lines).some((line) => citesResolvedFootnote(line) || /https?:\/\//.test(line)))
         .map((section) => section.heading);
 }
 
