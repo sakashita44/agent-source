@@ -112,19 +112,40 @@ deep-research/20260707-example-topic/
 
 ### 機械検証
 
-執筆後、検証スクリプトを実行し、PASS するまで修正する。
+執筆後、検証スクリプトを実行する。
 
 ```bash
-node <skillのディレクトリ>/scripts/check-report.mjs --report <作業dir>/report.md --min-sources <最低ソース数> [--check-links]
+node <skillのディレクトリ>/scripts/check-report.mjs --report <作業dir>/report.md --min-sources <最低ソース数> --ledger <作業dir>/sources.md [--check-links]
 ```
 
-Sources のユニーク URL 数が下限以上であること、および本文の各セクションに文中引用があることを検査する。`--check-links` を付与した場合は、Sources の URL へ到達できるかも確認する。ネットワークを利用できない環境では SKIP と出力し、その旨を `progress.md` へ記録する。
+スクリプトは次の項目を検査する。
+
+- Sources のユニーク URL 数が最低ソース数以上であること。重複の判定では、query、fragment、パス末尾のスラッシュを除き、ホスト名の大文字と小文字を区別しない
+- Sources の URL がすべて URL として解釈できること
+- 本文の脚注参照がすべて Sources 内の脚注定義へ解決し、各定義が URL を含むこと
+- 除外見出し以外の本文セクションに、解決する脚注参照または URL があること
+- `--ledger` を指定した場合、Sources の URL がすべて `sources.md` にあること
+- `--check-links` を指定した場合、Sources の URL へ到達できること
+
+実行結果は、最終行の `RESULT` と終了コードで判定する。
+
+| RESULT | 終了コード | 対応 |
+| --- | --- | --- |
+| `PASS` | 0 | 完成として報告できる |
+| `FAIL` | 1 | FAIL の行を解消するまでレポートを修正する。引数の誤りも終了コード 1 になる |
+| `UNVERIFIED` | 2 | ネットワークを利用できず、リンクの到達性を確認できなかった。他の検査は成功しているため、レポートは修正しない。到達性が未検証であることを `progress.md` へ記録し、報告にも明記する |
 
 FAIL のまま完成報告をしない。
 
+スクリプトは記法と対応関係だけを検査する。次の事項は、`references/report-guidelines.md` の品質チェックリストに従って執筆者が確認する。
+
+- 引用先が本文の主張を実際に支持していること
+- ソースの品質と信頼性
+- `sources.md` の各 URL が、実際に読んだソースとして `notes/` に記録されていること
+
 ## 報告
 
-`report.md` のパス、3〜5 行の要旨、確度の低い箇所と未解決の論点、機械検証の結果を報告する。
+`report.md` のパス、3〜5 行の要旨、確度の低い箇所と未解決の論点、機械検証の結果を報告する。機械検証が `UNVERIFIED` の場合は、リンクの到達性が未検証であることを明記する。
 
 ## 制約
 
