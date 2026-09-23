@@ -21,11 +21,13 @@ targets:
 
 変更を伴う処理を提案するときは、対象を復元できる状態にあるか確認する。Git などで復元手段が確保されている場合は、追加の確認やバックアップを求めない。復元手段がない場合は、バックアップ、dry-run、隔離環境などを提案に含め、必要な判断を実行前にユーザーへ求める。
 
-target project のコマンドを実行する前に、Git 管理外のローカル設定も含めて project の実行契約を確認し、適用する。Skill に付属する補助 script には、Skill が指定する実行方法を適用する。
+target project のコマンドを実行する前に、`mise.local.toml` など Git 管理外のローカル設定も含めて project の実行契約を確認し、適用する。Skill に付属する補助 script には、Skill が指定する実行方法を適用する。Skill が相対パスで示す script は、作業ディレクトリではなく Skill のディレクトリを起点に解決する。
 
 コマンド名が直接見つからなくても、対象が宣言した runner や実行経路を確認する。拡張子だけから別の実行方法を推測せず、Skill の補助 script に project の依存環境を無条件に流用しない。
 
 導入済みの runner が、宣言済みの実行方法に従って自身の管理領域内に作るものは、通常実行として扱う。cache、隔離環境、宣言済み依存 package、managed runtime がこれに当たる。
+
+project の実行契約にも Skill の実行方法にも属さない作業で Python が必要な場合は、`python` コマンドを直接呼ばず、`uv run --no-project` で実行する。`--no-project` を付けない `uv run` は、`pyproject.toml` を持つ project の内側で実行すると、project の `.venv` や `uv.lock` を作成する。ファイルの読み書きや置換には、Python より専用の編集ツールを優先する。
 
 target project の依存宣言を勝手に変更しない。global tool / package や host capability 自体を勝手に導入しない。PATH・shell profile・user / system configuration も勝手に変更しない。宣言済みの経路でも必要な capability を利用できない場合は、不足しているものと理由を報告して停止する。
 
