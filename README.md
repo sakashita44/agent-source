@@ -15,7 +15,7 @@
 
 - Node.js: `write-docs`、`verify-docs`、`deep-research`、`pr-merge` に付属する `.mjs` を実行する場合
 - npm の `npx`: `write-docs` の textlint を実行する場合
-- uv: `natural-japanese` に付属する Python スクリプトを実行する場合。uv はスクリプトの宣言に従い、Python と依存パッケージを解決する
+- uv: `natural-japanese` に付属する Python スクリプトを実行する場合
 - Git: Git 操作を行う Skill を実行する場合
 - GitHub CLI（`gh`）: `pr-merge` に付属する `.mjs` を実行する場合
 
