@@ -11,15 +11,15 @@
 
 ### 配布後の Skill 実行
 
-使用する Skill に応じて、ホストには次の実行基盤が必要となる。導入・管理方法はホスト側で決める。
+使用する Skill に応じて、ホストには次の実行基盤が必要となる。導入と管理の方法はホスト側で決定する。
 
 - Node.js: `write-docs`、`verify-docs`、`deep-research`、`pr-merge` に付属する `.mjs` を実行する場合
-- npm の `npx`: `write-docs` の textlint を実行する場合。指定された版の package が target project にない場合は、npm cache に取得される
-- uv: `natural-japanese` に付属する Python スクリプトを実行する場合。uv はスクリプトの宣言に従い、Python と依存 package を解決する
+- npm の `npx`: `write-docs` の textlint を実行する場合。指定された版のパッケージが対象プロジェクトにない場合は、npm キャッシュへ取得される
+- uv: `natural-japanese` に付属する Python スクリプトを実行する場合。uv はスクリプトの宣言に従い、Python と依存パッケージを解決する
 - Git: Git 操作を行う Skill を実行する場合
 - GitHub CLI（`gh`）: `pr-merge` に付属する `.mjs` を実行する場合
 
-そのほかの Skill が使うコマンドについては、各 Skill の実行条件と手順を参照する。
+その他の Skill が使用するコマンドについては、各 Skill の実行条件と手順を参照のこと。
 
 初回セットアップ時、または lockfile の更新後に、リポジトリで固定された Rulesync を導入する。
 
