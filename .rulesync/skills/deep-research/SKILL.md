@@ -122,8 +122,8 @@ node <skillのディレクトリ>/scripts/check-report.mjs --report <作業dir>/
 
 - Sources のユニーク URL 数が最低ソース数以上であること。重複の判定では、query、fragment、パス末尾のスラッシュを除き、ホスト名の大文字と小文字を区別しない
 - Sources の URL がすべて URL として解釈できること
-- 本文の脚注参照がすべて Sources 内の脚注定義へ解決し、各定義が URL を含むこと
-- 除外見出し以外の本文セクションに、解決する脚注参照または URL があること
+- 本文の脚注参照がすべて Sources 内の脚注定義へ解決し、各定義が URL を含むこと。コードブロックとインラインコードの中は参照として数えない
+- 除外見出し以外の本文セクションに、コードの外で、解決する脚注参照または URL があること
 - `--ledger` を指定した場合、Sources の URL がすべて `sources.md` にあること
 - `--check-links` を指定した場合、Sources の URL へ到達できること
 
