@@ -15,9 +15,11 @@
 
 - Node.js: `write-docs`、`verify-docs`、`deep-research`、`pr-merge` に付属する `.mjs` を実行する場合
 - npm の `npx`: `write-docs` の textlint を実行する場合
-- uv: `natural-japanese` に付属する Python スクリプトを実行する場合
+- uv: `natural-japanese` に付属する Python スクリプトを実行する場合。Python 本体と依存パッケージは uv が自身の管理領域に用意するため、ホストへ Python を導入する必要はない
 - Git: Git 操作を行う Skill を実行する場合
 - GitHub CLI（`gh`）: `pr-merge` に付属する `.mjs` を実行する場合
+
+Python は uv 経由で実行する。プロジェクトにも Skill にも属さない作業でエージェントがスクリプトを実行する場合も、列挙した Node.js か uv を用い、ホストに求める実行基盤を増やさない。
 
 サンドボックスを使うエージェントでは、サンドボックス内からもこれらを起動し、各管理領域へ書き込める必要がある。
 
