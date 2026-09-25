@@ -40,7 +40,8 @@ agent-source/
 │   ├── skills/
 │   ├── subagents/
 │   ├── hooks.jsonc
-│   └── mcp.jsonc
+│   ├── mcp.jsonc
+│   └── permissions.jsonc
 ├── hooks/
 ├── scripts/
 │   ├── apply.ps1
@@ -52,19 +53,20 @@ agent-source/
 └── rulesync.lock
 ```
 
-- `rulesync.jsonc`: 生成対象、配布する機能、外部から取得する Skill の取得元を定義する
+- `rulesync.jsonc`: 生成対象、対象ごとに配布する機能、外部から取得する Skill の取得元を定義する
 - `.rulesync/rules/`: 全環境に共通する規則と、エージェントごとのサブエージェント利用規則を格納する
 - `.rulesync/skills/`: 実装、成果物、文章、検証、Git、サブエージェント利用の原則を Skill 単位で格納する
 - `.rulesync/mcp.jsonc`: 配布する MCP 設定を定義する
 - `.rulesync/subagents/`: ツール制限を伴うサブエージェント定義を格納する
 - `.rulesync/hooks.jsonc`: 配布する AI エージェントの hook を定義する
+- `.rulesync/permissions.jsonc`: agy（Antigravity CLI）に許可する読み取り用のコマンドを定義する。生成時は `~/.gemini/antigravity-cli/settings.json` の既存の設定を残し、`command(...)` の規則だけをこのファイルの内容で置き換える
 - `hooks/`: hook から呼び出すスクリプトを格納する。Rulesync は hook の設定ファイルのみを配布するため、`scripts/apply.ps1` が `~/.local/agent-source/hooks/` へ配置する
 - `scripts/verify.ps1`: 隔離した一時的なホームディレクトリへ生成し、設定の非破壊性と生成結果を検証する
 - `scripts/apply.ps1`: dry-run、Rulesync への移行前に手作業で配置していた Skill（以下、手動配置の Skill）のバックアップと対象を絞った削除、利用中のホームディレクトリへの生成、生成結果の検査を行う
 - `AGENTS.md`: このリポジトリで作業するエージェント向けに、編集対象と生成されたファイルの区別、生成と適用の手段、Git 管理外ディレクトリの扱いを記載する
 - `CLAUDE.md`: `AGENTS.md` を import する 1 行のみで構成する。これにより、`AGENTS.md` を読み込まない Claude Code にも同じ内容を反映できる
 
-Rulesync は `claudecode`、`codexcli`、`antigravity-ide`、`antigravity-cli` を対象とし、rules、skills、subagents、hooks、MCP を配布する。
+Rulesync は `claudecode`、`codexcli`、`antigravity-ide`、`antigravity-cli` の 4 つを生成対象とする。rules、skills、subagents、hooks、MCP は 4 つすべてに配布する。permissions は、`codexcli` で有効にすると `config.toml` の `default_permissions` と承認の設定まで書き換えられるため、`antigravity-cli` だけに配布する。
 
 `tmp/` は Git の管理対象外であり、検証用のホームディレクトリおよび適用前バックアップの保存先として使用する。
 

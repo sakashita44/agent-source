@@ -1,18 +1,13 @@
 {
   "$schema": "https://github.com/dyoshikawa/rulesync/releases/latest/download/config-schema.json",
-  "targets": [
-    "claudecode",
-    "codexcli",
-    "antigravity-ide",
-    "antigravity-cli"
-  ],
-  "features": [
-    "rules",
-    "skills",
-    "subagents",
-    "hooks",
-    "mcp"
-  ],
+  // permissions は antigravity-cli だけで有効にする。
+  // codexcli で有効にすると config.toml の default_permissions と承認設定まで書き換えられるため。
+  "targets": {
+    "claudecode": ["rules", "skills", "subagents", "hooks", "mcp"],
+    "codexcli": ["rules", "skills", "subagents", "hooks", "mcp"],
+    "antigravity-ide": ["rules", "skills", "subagents", "hooks", "mcp"],
+    "antigravity-cli": ["rules", "skills", "subagents", "hooks", "mcp", "permissions"]
+  },
   "sources": [
     {
       "source": "coji/natural-japanese",
