@@ -1,0 +1,18 @@
+{
+  "$schema": "https://github.com/dyoshikawa/rulesync/releases/latest/download/permissions-schema.json",
+  "permission": {},
+  // agy は headless 実行で確認に応答できず、許可されていないコマンドを拒否してターンを終える。
+  // 副作用のない読み取り用のコマンドだけを許可し、委譲先で実行できるようにする。
+  // Windows の agy は語単位の前方一致（command(git)）を一致させないため、regex: で書く。
+  "antigravity-cli": {
+    "permission": {
+      "bash": {
+        "regex:git (status|log|diff|show|blame|ls-files|rev-parse)( .*)?": "allow",
+        "regex:gh (issue|pr) (view|list|diff|checks)( .*)?": "allow",
+        // ファイルへ書き出す --output と、ブラウザを開く --web は読み取りの範囲を超える。
+        "regex:git .*--output.*": "deny",
+        "regex:gh .*--web.*": "deny"
+      }
+    }
+  }
+}
