@@ -1,6 +1,15 @@
 # agent-source
 
-`agent-source` は、複数のエージェント環境へ配布するルール、Skill、サブエージェント定義、hook、MCP 設定を Rulesync の入力として管理するリポジトリである。各環境へ生成されたファイルは直接編集せず、リポジトリ内の入力を編集する。
+`agent-source` は、複数のエージェント環境への配布内容を Rulesync の入力として管理するリポジトリである。次のものを配布する。
+
+- ルール
+- Skill
+- サブエージェント定義
+- hook
+- MCP 設定
+- agy（Antigravity CLI）のコマンドの許可ルール
+
+各環境へ生成されたファイルは直接編集せず、リポジトリ内の入力を編集する。
 
 ## 要求環境
 
@@ -89,7 +98,12 @@ npx rulesync install
 
 ### 生成差分の確認
 
-dry-run は、利用中のホームディレクトリ、バックアップ、手動配置の Skill、生成結果を変更せず、Rulesync が生成する差分を表示する。
+dry-run は、Rulesync が生成する差分を表示する。次の 4 つは変更しない。
+
+- 利用中のホームディレクトリ
+- バックアップ
+- 手動配置の Skill
+- 生成結果
 
 ```powershell
 ./scripts/apply.ps1 -DryRun
