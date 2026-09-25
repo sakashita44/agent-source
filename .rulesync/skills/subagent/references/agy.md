@@ -25,7 +25,7 @@ cwd と `--add-dir` は、agy が書き込みを承認する範囲を定める�
 | cwd 内の編集 | 編集対象の作業ツリーのルート | `--mode accept-edits` | 編集対象の絶対パスと、agy 自身が対象を直接編集すること |
 | cwd 外を含む編集 | 主な編集対象の作業ツリーのルート | `--mode accept-edits`、追加の対象ルートごとの `--add-dir` | 各ルートの絶対パスと、ルートごとに許可するファイルと操作 |
 
-- `--mode accept-edits` を付けない場合、cwd 内への書き込みも拒否される
+- `--mode accept-edits` を指定しない場合、cwd 内への書き込みも拒否される。編集を許可しない委譲には指定しない
 - `--mode accept-edits` が承認する範囲は、cwd と `--add-dir` で加えたディレクトリに限られる。`--add-dir` には、編集に必要な最小のディレクトリを指定する
 - agy の scratch や `%TEMP%` 配下に作られたファイルは、成果物として扱わない
 - `--sandbox` は付けない
@@ -60,7 +60,7 @@ agy の実行中に Windows の UAC が管理者権限を求めた場合は、�
 
 ツールの呼び出しが拒否されても、agy は終了コード 0 で終了し、JSON 出力の `status` は `SUCCESS` になる。終了コードと `status` は成功の根拠にしない。
 
-JSON として解析できない出力は、成功として扱わない。JSON 出力の `denied_actions` に項目がある場合は、権限拒否による失敗として扱う。拒否された `action` が `write_file` の場合は、cwd、`--mode accept-edits`、`--add-dir`、プロンプトの絶対パスを見直して再試行する。`command` の場合は、[コマンドの扱い](#コマンドの扱い)に従って、コマンドを起動元の作業へ分ける。権限拒否がなければ、`denied_actions` は出力に含まれない。
+JSON として解析できない出力は、成功として扱わない。JSON 出力の `denied_actions` に項目がある場合は、権限拒否による失敗として扱う。拒否された `action` が `write_file` の場合は、cwd、`--mode accept-edits`、`--add-dir`、プロンプトの絶対パスを見直して再試行する。編集を許可しない委譲では、`--mode accept-edits` を指定せず、ファイルを編集しない旨をプロンプトに明記して再試行する。`command` の場合は、[コマンドの扱い](#コマンドの扱い)に従って、コマンドを起動元の作業へ分ける。権限拒否がなければ、`denied_actions` は出力に含まれない。
 
 agy の設定にある `permissions.deny` に一致したコマンドは、`denied_actions` に記録されず、コマンドのエラーとして agy に返される。この場合、ターンは続く。
 
