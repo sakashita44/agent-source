@@ -2,8 +2,8 @@
 name: stack-conventions
 description: >-
   Use when developing for a specific platform or runtime such as an Android app
-  or a game engine, and when choosing its UI toolkit, language, engine, version,
-  or ecosystem-standard approach.
+  or a game engine, or a web site or web app, and when choosing its UI toolkit,
+  design system, language, engine, version, or ecosystem-standard approach.
 ---
 
 # Stack Conventions

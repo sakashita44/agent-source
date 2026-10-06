@@ -18,6 +18,8 @@
 - agy に許可する読み取り用のコマンド（`permissions.jsonc`）。`git` の status、log、diff、show、blame、ls-files、rev-parse と、`gh` の issue、pr の view、list、diff、checks を許可し、ファイルへ書き出す `--output` とブラウザを開く `--web` を拒否する。生成時は `~/.gemini/antigravity-cli/settings.json` の既存の設定を残す。permissions は `antigravity-cli` だけに配布し、Claude Code と Codex の設定は変更しない
 - 許可ルールにあるコマンドの委譲（`subagent`）。agy の設定にある許可ルールに一致するコマンドは、コマンドと引数を明示して実行させてよい。拒否の規則に一致したコマンドは `denied_actions` に記録されず、コマンドのエラーとして返る
 - 1 文の中で主体が利用者からツールへ切り替わる文の例（`write-docs` の `references/review-examples.md`）。利用者の操作は能動態、その結果としてツールが行う処理は受動態で書き分ける
+- Web サイト・Web アプリ向けの reference（`stack-conventions` の `references/web.md`）。デザインシステムの確認先としてデジタル庁デザインシステムを記載する
+- UI 文言の確認先（`writing-principles` の `references/ui-text.md`）。ラベルやエラーメッセージを書くときに従うガイドラインを、日本語の Web、Android、Windows ごとに定める。プロジェクトのスタイルガイドがあればそれを優先する。「※必須」などデジタル庁デザインシステムの Web 固有の表記は Web に限って用い、ネイティブアプリには持ち込まない
 
 ### Changed
 
