@@ -18,6 +18,8 @@
 
 利用中のホームディレクトリへ適用する前に、dry-run で差分が意図した配布内容のみであることを確認のこと。
 
+Rulesync の版を変更すると、配布内容を変更していなくても生成結果が変わる。版を変更する場合は、README の「Rulesync の更新」の手順に従って生成差分を確認すること。
+
 hook は設定ファイルのみが Rulesync の配布対象であり、hook から呼び出すスクリプトの実体は `scripts/apply.ps1` が `~/.local/agent-source/hooks/` へ配置する。`hooks/` 配下を変更した場合、生成の実行だけでは実環境へ反映されない。Windows で hook を bash 以外のシェルで実行する配布先には Windows 専用コマンドを定義し、PATH 上の `bash` が Git Bash を指す前提を置かない。
 
 ## Git 管理外のディレクトリ
