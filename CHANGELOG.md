@@ -25,6 +25,8 @@
 
 ### Changed
 
+- Rulesync を 16.3.0 から 27.0.0 へ更新する。生成される Skill のファイルは、改行コードと末尾の改行を含めて `.rulesync/` の内容と一致する。Codex の `config.toml` の MCP 設定には `type` キーが出力されなくなる。Claude Code の `settings.json` に `$schema` が加わる
+- Rulesync の更新方針（`README.md`、`AGENTS.md`）。版は `package.json` と lockfile で固定し、配布先の仕様変更、必要な機能や不具合の修正、セキュリティ上の問題、Node.js との互換性を契機に更新する。推移依存の deprecated warning は、導入の失敗やセキュリティ勧告を伴わない限り更新の理由としない。更新の可否は版番号の種別ではなく生成差分で判断する。要求環境から Rulesync の版番号を除く
 - hook の実体と compact hook の状態の配置先を `~/.agent-source/` から `~/.local/agent-source/` へ変更する
 - 同じ概念の用語規則（`writing-principles`）。同じ概念にはできる限り同一の用語を用いつつ、誤解を招かない範囲での文脈に応じた言い換えを許容する。ただし定義した用語、識別子、UI 上の表記は言い換えない
 - 情報の所在を表す表現（`writing-principles`）。「正本」を編集する場所、生成元、規則を定める文書、優先する情報源の総称として使わず、関係に応じた動詞で書く。名詞が必要な箇所では「規定元」「生成元」を用いる
