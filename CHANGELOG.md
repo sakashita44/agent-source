@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-08
+
 ### Added
 
 - Skill の実行依存と許容するホスト変更の境界（`README.md`、`00-global.md`）。配布後の実行要件を用途別に示し、サンドボックスから実行基盤を起動して管理領域へ書き込めることも含める。宣言された実行方法に従うランナーの依存解決と、プロジェクトやホストの設定変更を区別する。Skill の補助スクリプトは Skill のディレクトリを起点に解決する。プロジェクトにも Skill にも属さないスクリプトの実行には Node.js か uv を用い、Python は `uv run --no-project` で実行する
@@ -79,6 +81,7 @@
 - 第三者 Skill の宣言的な取得。`rulesync.jsonc` の `sources` で取得元を宣言し、`rulesync.lock` で commit SHA と整合性ハッシュを固定する。本体はこのリポジトリで管理しない
 - 隔離したホームディレクトリへ生成して非破壊性を確認する検証手順（`scripts/verify.ps1`）と、実際のホームディレクトリへ適用する手順（`scripts/apply.ps1`）
 
-[Unreleased]: https://github.com/sakashita44/agent-source/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/sakashita44/agent-source/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/sakashita44/agent-source/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/sakashita44/agent-source/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/sakashita44/agent-source/releases/tag/v1.0.0
