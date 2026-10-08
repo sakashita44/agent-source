@@ -9,6 +9,8 @@
 - MCP 設定
 - agy（Antigravity CLI）のコマンドの許可ルール
 
+配布する Skill の用途と起動のしかたは、[Skill の一覧](docs/skills.md) を参照のこと。
+
 各環境へ生成されたファイルは直接編集せず、リポジトリ内の入力を編集する。
 
 ## 要求環境
@@ -70,7 +72,7 @@ agent-source/
 - `.rulesync/subagents/`: ツール制限を伴うサブエージェント定義を格納する
 - `.rulesync/hooks.jsonc`: 配布する AI エージェントの hook を定義する
 - `.rulesync/permissions.jsonc`: agy（Antigravity CLI）に許可する読み取り用のコマンドを定義する。生成時は `~/.gemini/antigravity-cli/settings.json` の既存の設定を残し、`command(...)` の規則だけをこのファイルの内容で置き換える
-- `docs/`: 保守作業の手順書を格納する
+- `docs/`: 利用者向けの Skill 一覧と、保守作業の手順書を置く
 - `hooks/`: hook から呼び出すスクリプトを格納する。Rulesync は hook の設定ファイルのみを配布するため、`scripts/apply.ps1` が `~/.local/agent-source/hooks/` へ配置する
 - `scripts/verify.ps1`: 隔離した一時的なホームディレクトリへ生成し、設定の非破壊性と生成結果を検証する
 - `scripts/apply.ps1`: dry-run、Rulesync への移行前に手作業で配置していた Skill（以下、手動配置の Skill）のバックアップと対象を絞った削除、利用中のホームディレクトリへの生成、生成結果の検査を行う
@@ -183,4 +185,4 @@ npm の deprecated warning など、Rulesync の推移依存に起因する警�
 
 ### Skill の点検
 
-配布する Skill が、外部の Skill や配布先の現状に照らして古くなっていないかを、必要と判断したときに点検する。利用者がエージェントへ [Skill の点検](docs/skill-audit.md) の手順に沿った点検を依頼し、チャットで受け取った提案のうち採用するものを Issue にする。
+配布する Skill が、外部の Skill や配布先の現状に照らして古くなっていないかを、必要と判断したときに点検する。利用者がエージェントへ [Skill の点検](docs/skill-audit.md) の手順に沿って点検を依頼し、チャットで受け取った提案のうち採用するものを Issue にする。
