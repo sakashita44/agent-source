@@ -4,7 +4,7 @@ targets:
 name: purify-artifact
 description: >-
   Rewrites a settled plan or issue body so it reads for someone who knows the
-  requirement but not the deliberation. Use after the decision record is
+  requirement but not the deliberation. Use after the decision issue is
   written, before publishing the artifact.
 claudecode:
   tools:
