@@ -37,7 +37,7 @@ Windows 上の作業では、WSL へツールを直接導入しない。WSL で�
 
 利用可能な Skill を確認し、依頼に適合するものを使用する。
 
-- 設計、実装、コードレビュー、技術的な提案では `engineering-principles` を必ず適用する
+- 設計、実装、レビュー、技術的な提案では、コード、ルール、設定、Skill、形式定義など手段を問わず `engineering-principles` を必ず適用する
 - 情報と意図を成果物へ配置するときは `artifact-principles` を必ず適用する
 - 文書、Issue、PR description、技術メモ、コードコメント、コミットメッセージなど残存する文章を執筆、編集、レビューするときは `writing-principles` を必ず適用する
 - 変更、既存成果物、文書、手順、コードの検証と完了判定では `verification-principles` を必ず適用する
