@@ -23,6 +23,7 @@
 - 判断と開発の過程の記録先（`artifact-principles`）。リポジトリには規範と現行の事実を置き、判断の過程と開発の管理は Issue に置く。判断、理由、前提条件、採用しなかった案は decision issue に記録し、ADR はリポジトリの規約が求める場合に限って用いる。過去の決定は書き換えず、新しい decision issue で改訂する。`plan`、`write-comments`、`purify-artifact` の記述も decision issue に揃える
 - リポジトリ内の成果物の自立（`artifact-principles`、`write-comments`）。作業ツリーのコード、コメント、文書、設定に、開発の工程に関する情報と、プロジェクト自身の Issue や PR への参照を含めない。リポジトリ内の文書の `TODO:` は文書の未記入部分に限って置き、検討課題と作業計画は Issue で扱う
 - 文書の新設と削除の基準（`artifact-principles`）。永続文書は、コード、型、テスト、設定、README、要求文書では果たせない役割がある場合に限って作る。不要になった文書は、必要な情報を、その役割に合う成果物へ移したうえで削除する
+- 委譲の手段（`01-subagent-claude-codex.md`）。Claude Code と Codex からの委譲先は CLI で起動する。Claude Code の組み込みのサブエージェントは、ユーザーが指定した場合と、fallback の手順でユーザーが承認した場合に限る
 
 ### Fixed
 
