@@ -51,6 +51,7 @@ agent-source/
 │   ├── hooks.jsonc
 │   ├── mcp.jsonc
 │   └── permissions.jsonc
+├── docs/
 ├── hooks/
 ├── scripts/
 │   ├── apply.ps1
@@ -69,6 +70,7 @@ agent-source/
 - `.rulesync/subagents/`: ツール制限を伴うサブエージェント定義を格納する
 - `.rulesync/hooks.jsonc`: 配布する AI エージェントの hook を定義する
 - `.rulesync/permissions.jsonc`: agy（Antigravity CLI）に許可する読み取り用のコマンドを定義する。生成時は `~/.gemini/antigravity-cli/settings.json` の既存の設定を残し、`command(...)` の規則だけをこのファイルの内容で置き換える
+- `docs/`: 保守作業の手順書を格納する
 - `hooks/`: hook から呼び出すスクリプトを格納する。Rulesync は hook の設定ファイルのみを配布するため、`scripts/apply.ps1` が `~/.local/agent-source/hooks/` へ配置する
 - `scripts/verify.ps1`: 隔離した一時的なホームディレクトリへ生成し、設定の非破壊性と生成結果を検証する
 - `scripts/apply.ps1`: dry-run、Rulesync への移行前に手作業で配置していた Skill（以下、手動配置の Skill）のバックアップと対象を絞った削除、利用中のホームディレクトリへの生成、生成結果の検査を行う
@@ -152,7 +154,9 @@ Rulesync の生成挙動を利用中のホームディレクトリから分離�
 - バックアップの検証が失敗した場合: 手動配置の Skill は削除されない。エラー出力に示されたコピー元、バックアップ先、相対パス、SHA-256 を確認すること
 - 手動配置の Skill の削除後に生成または check が失敗した場合: エラー出力に示されたバックアップを元の相対パスへ再配置すること。Rulesync が生成した rules、MCP 設定、Skill は、実行前に確保した復元手段を用いて元に戻すこと
 
-## Rulesync の更新
+## 保守
+
+### Rulesync の更新
 
 Rulesync の版は `package.json` で固定し、`package-lock.json` とあわせて Git で管理する。版によって配布先の設定ファイルの生成結果が変わるため、最新版へ自動で追従しない。定期的な確認も行わず、次のいずれかに該当した場合に更新を検討する。
 
@@ -176,3 +180,7 @@ npm の deprecated warning など、Rulesync の推移依存に起因する警�
 4. `verify.ps1` を実行し、生成された `tmp/home` を退避した生成結果と比較する。差分が release notes で説明できる変更に限られることを確認する
 5. [生成差分の確認](#生成差分の確認)の dry-run を実行し、利用中のホームディレクトリで書き込み対象となるファイルを確認する
 6. 説明できない差分がある場合は `.rulesync/` を調整するか、更新を見送る。問題がなければ `package.json` と `package-lock.json` をコミットする
+
+### Skill の点検
+
+配布する Skill が、外部の Skill や配布先の現状に照らして古くなっていないかを、必要と判断したときに点検する。利用者がエージェントへ [Skill の点検](docs/skill-audit.md) の手順に沿った点検を依頼し、チャットで受け取った提案のうち採用するものを Issue にする。
