@@ -50,85 +50,6 @@ function Invoke-Rulesync {
     }
 }
 
-function Assert-DescendantPath {
-    param(
-        [Parameter(Mandatory = $true)][string]$ParentPath,
-        [Parameter(Mandatory = $true)][string]$ChildPath
-    )
-
-    $parentFullPath = [System.IO.Path]::GetFullPath($ParentPath).TrimEnd('\', '/')
-    $childFullPath = [System.IO.Path]::GetFullPath($ChildPath).TrimEnd('\', '/')
-    $prefix = $parentFullPath + [System.IO.Path]::DirectorySeparatorChar
-    if (-not $childFullPath.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
-        throw "Path is outside the allowed root: $childFullPath"
-    }
-}
-
-function Assert-NoReparsePointInPath {
-    param(
-        [Parameter(Mandatory = $true)][string]$RootPath,
-        [Parameter(Mandatory = $true)][string]$TargetPath
-    )
-
-    $rootFullPath = [System.IO.Path]::GetFullPath($RootPath).TrimEnd('\', '/')
-    $currentPath = [System.IO.Path]::GetFullPath($TargetPath).TrimEnd('\', '/')
-    Assert-DescendantPath -ParentPath $rootFullPath -ChildPath $currentPath
-
-    while ($currentPath.Length -gt $rootFullPath.Length) {
-        if (Test-Path -LiteralPath $currentPath) {
-            $item = Get-Item -LiteralPath $currentPath -Force
-            if ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
-                throw "Path contains a reparse point: $currentPath"
-            }
-        }
-        $currentPath = Split-Path -Parent $currentPath
-    }
-}
-
-function Assert-NoNestedReparsePoint {
-    param([Parameter(Mandatory = $true)][string]$Directory)
-
-    $reparsePoint = Get-ChildItem -LiteralPath $Directory -Recurse -Force |
-        Where-Object { $_.Attributes -band [System.IO.FileAttributes]::ReparsePoint } |
-        Select-Object -First 1
-    if ($reparsePoint) {
-        throw "Directory to be removed contains a reparse point: $($reparsePoint.FullName)"
-    }
-}
-
-function Get-RelativePathWithin {
-    param(
-        [Parameter(Mandatory = $true)][string]$BasePath,
-        [Parameter(Mandatory = $true)][string]$FullPath
-    )
-
-    $baseFullPath = [System.IO.Path]::GetFullPath($BasePath).TrimEnd('\', '/')
-    $itemFullPath = [System.IO.Path]::GetFullPath($FullPath)
-    Assert-DescendantPath -ParentPath $baseFullPath -ChildPath $itemFullPath
-    return $itemFullPath.Substring($baseFullPath.Length).TrimStart('\', '/')
-}
-
-function Get-FileManifest {
-    param(
-        [Parameter(Mandatory = $true)][string]$BasePath,
-        [Parameter(Mandatory = $true)][string[]]$Directories
-    )
-
-    $entries = @()
-    foreach ($directory in $Directories) {
-        if (-not (Test-Path -LiteralPath $directory -PathType Container)) {
-            continue
-        }
-
-        foreach ($file in Get-ChildItem -LiteralPath $directory -Recurse -File | Sort-Object FullName) {
-            $relativePath = Get-RelativePathWithin -BasePath $BasePath -FullPath $file.FullName
-            $entries += "$relativePath`t$((Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash)"
-        }
-    }
-
-    return @($entries | Sort-Object)
-}
-
 function Get-TargetHome {
     $candidate = $env:HOME
     if ([string]::IsNullOrWhiteSpace($candidate)) {
@@ -161,97 +82,6 @@ function Copy-HookScripts {
     Copy-Item -Path (Join-Path $source '*.mjs') -Destination $destination -Force
     Write-Host "Hook scripts copied to: $destination"
 }
-function Get-SafeTemporaryRoot {
-    param([Parameter(Mandatory = $true)][string]$RepositoryRoot)
-
-    $temporaryRoot = Join-Path $RepositoryRoot 'tmp'
-    New-Item -ItemType Directory -Path $temporaryRoot -Force | Out-Null
-    $resolvedTemporaryRoot = (Resolve-Path -LiteralPath $temporaryRoot).ProviderPath
-    Assert-DescendantPath -ParentPath $RepositoryRoot -ChildPath $resolvedTemporaryRoot
-    if ((Get-Item -LiteralPath $resolvedTemporaryRoot).Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
-        throw "Temporary directory is a reparse point: $resolvedTemporaryRoot"
-    }
-
-    return $resolvedTemporaryRoot
-}
-
-function Get-LegacySkillDirectories {
-    param([Parameter(Mandatory = $true)][string]$TargetHome)
-
-    $skillRoots = @(
-        '.claude\skills',
-        '.agents\skills',
-        '.gemini\config\skills',
-        '.gemini\antigravity-cli\skills'
-    )
-    $legacySkillNames = @(
-        'commit',
-        'deep-research',
-        'grill-me',
-        'implement',
-        'plan',
-        'pr-merge',
-        'release',
-        'research',
-        'verify-code',
-        'verify-docs',
-        'verify-manual',
-        'write-docs'
-    )
-
-    $directories = @()
-    foreach ($skillRootRelativePath in $skillRoots) {
-        $skillRoot = Join-Path $TargetHome $skillRootRelativePath
-        foreach ($skillName in $legacySkillNames) {
-            $skillDirectory = Join-Path $skillRoot $skillName
-            if (-not (Test-Path -LiteralPath $skillDirectory -PathType Container)) {
-                continue
-            }
-
-            $resolvedSkillDirectory = (Resolve-Path -LiteralPath $skillDirectory).ProviderPath
-            Assert-DescendantPath -ParentPath $skillRoot -ChildPath $resolvedSkillDirectory
-            Assert-DescendantPath -ParentPath $TargetHome -ChildPath $resolvedSkillDirectory
-            Assert-NoReparsePointInPath -RootPath $TargetHome -TargetPath $resolvedSkillDirectory
-            if ((Split-Path -Leaf $resolvedSkillDirectory) -ne $skillName) {
-                throw "Legacy Skill directory name does not match the expected name: $resolvedSkillDirectory"
-            }
-            Assert-NoNestedReparsePoint -Directory $resolvedSkillDirectory
-
-            $directories += $resolvedSkillDirectory
-        }
-    }
-
-    return @($directories)
-}
-
-function Backup-LegacySkills {
-    param(
-        [Parameter(Mandatory = $true)][string]$TargetHome,
-        [Parameter(Mandatory = $true)][string[]]$SkillDirectories,
-        [Parameter(Mandatory = $true)][string]$BackupRoot
-    )
-
-    New-Item -ItemType Directory -Path $BackupRoot | Out-Null
-    foreach ($skillDirectory in $SkillDirectories) {
-        $relativeDirectory = Get-RelativePathWithin -BasePath $TargetHome -FullPath $skillDirectory
-        $backupDirectory = Join-Path $BackupRoot $relativeDirectory
-        New-Item -ItemType Directory -Path (Split-Path -Parent $backupDirectory) -Force | Out-Null
-        Copy-Item -LiteralPath $skillDirectory -Destination $backupDirectory -Recurse
-    }
-
-    [string[]]$sourceManifest = @(Get-FileManifest -BasePath $TargetHome -Directories $SkillDirectories)
-    [string[]]$backupManifest = @(Get-FileManifest -BasePath $BackupRoot -Directories @($BackupRoot))
-    if ($sourceManifest.Count -ne $backupManifest.Count) {
-        throw "Backup file count does not match the source. source=$($sourceManifest.Count), backup=$($backupManifest.Count)"
-    }
-
-    if ($sourceManifest.Count -gt 0) {
-        $difference = Compare-Object -ReferenceObject $sourceManifest -DifferenceObject $backupManifest
-        if ($difference) {
-            throw 'Backup paths or SHA-256 hashes do not match. Legacy Skill directories were not removed.'
-        }
-    }
-}
 
 Assert-CommandExists -Name 'node'
 $rulesyncCommand = Resolve-RulesyncCommand -RepositoryRoot $repoRoot
@@ -269,39 +99,10 @@ if ($DryRun) {
 Invoke-Rulesync -Command $rulesyncCommand -Arguments @('doctor', '--strict')
 Invoke-Rulesync -Command $rulesyncCommand -Arguments @('generate', '--global', '--dry-run')
 
-$targetHome = Get-TargetHome
-$temporaryRoot = Get-SafeTemporaryRoot -RepositoryRoot $repoRoot
-$timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-$backupRoot = Join-Path $temporaryRoot "backups\$timestamp-pre-rulesync-apply"
-Assert-DescendantPath -ParentPath $temporaryRoot -ChildPath $backupRoot
-$legacySkillDirectories = @(Get-LegacySkillDirectories -TargetHome $targetHome)
+# --delete は付けない。生成元にない Skill を、アプリが同期した ~/.claude/skills/synced/ や
+# デスクトップアプリの定期タスク（~/.claude/scheduled-tasks/）まで含めて削除するため。
+Invoke-Rulesync -Command $rulesyncCommand -Arguments @('generate', '--global')
+Invoke-Rulesync -Command $rulesyncCommand -Arguments @('generate', '--global', '--check')
+Copy-HookScripts -RepositoryRoot $repoRoot -TargetHome (Get-TargetHome)
 
-if ($legacySkillDirectories.Count -gt 0) {
-    Write-Host "Backing up legacy Skill directories: $backupRoot"
-    Backup-LegacySkills -TargetHome $targetHome -SkillDirectories $legacySkillDirectories -BackupRoot $backupRoot
-
-} else {
-    Write-Host 'No legacy Skill directories to remove.'
-}
-
-try {
-    foreach ($skillDirectory in $legacySkillDirectories) {
-        Write-Host "Removing verified legacy Skill directory: $skillDirectory"
-        Remove-Item -LiteralPath $skillDirectory -Recurse -Force
-    }
-
-    Invoke-Rulesync -Command $rulesyncCommand -Arguments @('generate', '--global')
-    Invoke-Rulesync -Command $rulesyncCommand -Arguments @('generate', '--global', '--check')
-    Copy-HookScripts -RepositoryRoot $repoRoot -TargetHome (Get-TargetHome)
-} catch {
-    if ($legacySkillDirectories.Count -gt 0) {
-        throw "Rulesync apply failed. Restore the legacy Skill backup to its original relative paths. backup=$backupRoot; error=$_"
-    }
-    throw
-}
-
-if ($legacySkillDirectories.Count -gt 0) {
-    Write-Host "Apply completed. Backup: $backupRoot"
-} else {
-    Write-Host 'Apply completed.'
-}
+Write-Host 'Apply completed.'
