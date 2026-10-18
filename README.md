@@ -66,7 +66,7 @@ agent-source/
 ```
 
 - `rulesync.jsonc`: 生成対象、対象ごとに配布する機能、外部から取得する Skill の取得元を定義する
-- `.rulesync/rules/`: 全環境に共通する規則と、エージェントごとのサブエージェント利用規則を格納する
+- `.rulesync/rules/`: 全環境に共通する規則と、サブエージェントの利用規則など特定のエージェントにだけ配布する規則を格納する
 - `.rulesync/skills/`: 実装、成果物、文章、検証、Git、サブエージェント利用の原則を Skill 単位で格納する
 - `.rulesync/mcp.jsonc`: 配布する MCP 設定を定義する
 - `.rulesync/subagents/`: ツール制限を伴うサブエージェント定義を格納する
