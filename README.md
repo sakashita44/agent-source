@@ -24,11 +24,12 @@
 
 使用する Skill に応じて、ホストに次の実行基盤が必要となる。
 
-- Node.js: `write-docs`、`verify-docs`、`deep-research`、`pr-merge` に付属する `.mjs` を実行する場合
+- Node.js: `write-docs`、`verify-docs`、`deep-research`、`pr-merge`、`google-web-analytics` に付属する `.mjs` を実行する場合
 - npm の `npx`: `write-docs` の textlint を実行する場合
 - uv: `natural-japanese` に付属する Python スクリプトを実行する場合。Python 本体と依存パッケージは uv が自身の管理領域に用意するため、ホストへ Python を導入する必要はない
 - Git: Git 操作を行う Skill を実行する場合
 - GitHub CLI（`gh`）: `pr-merge` に付属する `.mjs` を実行する場合
+- Google Cloud CLI（`gcloud`）と Application Default Credentials: `google-web-analytics` を実行する場合。準備の手順は `google-web-analytics` の [認証の準備](.rulesync/skills/google-web-analytics/references/setup.md) を参照のこと
 
 サンドボックスを使うエージェントでは、サンドボックス内からも各実行基盤を起動し、それぞれの管理領域へ書き込める必要がある。ただし Windows の Codex では、mise の shim がサンドボックス内で版を解決できないため、mise の shim を経由して起動する実行基盤はサンドボックスの外で実行する。この指示は Codex にだけ配布するルール（`.rulesync/rules/04-sandbox-codex.md`）に定める。
 
