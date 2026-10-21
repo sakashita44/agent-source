@@ -1,0 +1,93 @@
+---
+name: bitwarden-vault
+description: >-
+  Use when a task needs a secret stored in the user's Bitwarden vault without
+  seeing it, such as listing item names to reconcile them with a credential
+  ledger, registering a secret as a GitHub Actions secret, refreshing sudo
+  authentication on a remote host over ssh, or generating and saving a new
+  random secret. A broker process in a window on the user's Windows desktop
+  holds the unlocked vault and asks the user to approve each transfer.
+---
+
+# Bitwarden Vault
+
+利用者の Bitwarden の金庫にある秘密値を、エージェントが値を直接参照せずに利用する。金庫のロック解除と秘密値の受け渡しは、利用者のデスクトップ上のウィンドウで動作する仲介プロセスが担う。エージェントは付属スクリプトを用いて仲介プロセスへ要求を送信し、成否のみを受け取る。
+
+この Skill は Windows でのみ動作する。実行には Bitwarden CLI（`bw`）へのログインが必要であり、`gh-secret` への送信には GitHub CLI（`gh`）の認証が必要である。
+
+## 仲介プロセスの起動
+
+各操作の前に仲介プロセスを起動する。起動済みの場合は何もしない。
+
+```bash
+node <Skill のディレクトリ>/scripts/bw-vault.mjs start --client <エージェントの製品名>
+```
+
+付属スクリプトのすべてのコマンドに、`--client` で自身の呼び名を指定すること。呼び名は、利用者が指示した名前があればその名前とし、なければ製品名（`Claude Code`、`Codex`、`Antigravity` など）とする。仲介プロセスは、どのエージェントからのリクエストかをこの呼び名で利用者に表示する。以下の例では `--client` を省略する。
+
+起動すると新しいウィンドウが表示されるため、利用者にそのウィンドウでマスターパスワードの入力を依頼する。スクリプトは最大 90 秒間、ロック解除を待機する。待機中に解除されなかった場合は、利用者の入力完了後に `status` を実行して状態を確認する。
+
+利用者がウィンドウで 15 分間操作しない場合は、金庫がロックされ、仲介プロセスが終了する。リクエストの送信は操作に含まれない。作業完了後は `stop` を実行して終了させること。
+
+```bash
+node <Skill のディレクトリ>/scripts/bw-vault.mjs stop
+```
+
+Windows の Codex では、仲介プロセスの起動と付属スクリプトの実行をサンドボックスの外で行う。サンドボックス内からは、ウィンドウを開けない場合や、仲介プロセスの待ち受けポートへ接続できない場合があるためである。
+
+## 操作
+
+`send` と `generate` は、仲介プロセスのウィンドウで利用者が承認した場合に限り実行される。`--reason` には、利用者が承認の可否を判断できるよう、目的と影響を日本語で具体的に指定すること。応答の `approved` が `false` の場合は、利用者が要求を拒否したことを示す。理由を利用者に確認し、同じ要求を繰り返さないこと。
+
+項目名の一覧を取得する。応答には項目名、フォルダ、種別、パスワードの有無が含まれる。
+
+```bash
+node <Skill のディレクトリ>/scripts/bw-vault.mjs list [--search <文字列>]
+```
+
+項目のパスワードを GitHub Actions の secret に登録する。
+
+```bash
+node <Skill のディレクトリ>/scripts/bw-vault.mjs send gh-secret --item <項目名> --repo <owner/name> --name <Secret 名> [--env <環境名>] --reason <説明>
+```
+
+ssh で接続したリモートホストで `sudo -S -v` を実行し、sudo の認証を更新する。sudo の認証が失効し、`sudo -n` が失敗した場合に用いる。対象ホストにおいて、sudo の認証キャッシュがセッション間で共有される設定（sudoers の `timestamp_type=global`）を前提とする。仲介プロセスが `PATH` から解決する ssh は起動元のシェルによって異なり、対象ホストへの認証に必要な鍵を使用できない場合がある。`--ssh` には、エージェント自身が対象ホストへ接続できた ssh の実行ファイルを絶対パスで指定すること。実行ファイルのパスは `command -v ssh` または `(Get-Command ssh).Source` で確認できる。
+
+```bash
+node <Skill のディレクトリ>/scripts/bw-vault.mjs send ssh-sudo --item <項目名> --host <ssh の接続先> --ssh <ssh の実行ファイルの絶対パス> --reason <説明>
+```
+
+固定の送信先（`gh-secret`、`ssh-sudo`）では、利用者が「a」を入力して承認すると、仲介プロセスが終了するまで同じ項目と送信先の組み合わせが自動で承認される。
+
+固定の送信先では対応できない場合に限り、任意のコマンドの標準入力へ秘密値を渡す。コマンドは `--` の後に引数の配列として指定し、シェルを介さずに起動される。利用者は毎回 `yes` の入力で承認する。秘密値を画面、ファイル、ネットワークへ出力するコマンドや、エージェントが後から参照できる場所へ書き込むコマンドを組み立てないこと。利用者が承認の画面でコマンド全体を確認できるよう、秘密値を受け取るコマンドは、その値を必要とする処理だけに絞って短く保つこと。準備や後処理は別のコマンドとして実行する。
+
+```bash
+node <Skill のディレクトリ>/scripts/bw-vault.mjs send command --item <項目名> --reason <説明> -- <コマンド> [引数...]
+```
+
+`send` の応答に含まれる `exitCode` は、受け渡し先のコマンドの終了コードである。コマンドの出力は仲介プロセスのウィンドウにのみ表示されるため、失敗した場合は利用者にウィンドウの表示内容の確認を依頼すること。
+
+ランダムな値を生成し、新しいログイン項目のパスワードとして保存する。利用者が手動で入力する必要のない秘密値に限って用いる。項目名は `{対象サービス}-{種別}-{ラベル}` の形式とし、種別は `Token`、`Account`、`KeyPair` のいずれかとする。同名の項目がすでに存在する場合は拒否される。
+
+```bash
+node <Skill のディレクトリ>/scripts/bw-vault.mjs generate --name <項目名> [--folder <フォルダ名>] [--length <16〜128>] [--special] --reason <説明>
+```
+
+保存した値を利用する場合は、続けて `send` で受け渡す。保存後は、項目の用途と期限を利用者が台帳に記録できるよう、項目名を利用者に報告すること。
+
+## 禁止事項
+
+- `bw` コマンドを直接実行しないこと。`bw unlock`、`bw get`、`bw serve` を実行すると、秘密値やセッションキーがエージェントへ出力されるためである
+- 状態ファイル（`~/.local/agent-source/state/bitwarden-vault/broker.json`）のトークンを用いて、付属スクリプトを介さずに仲介プロセスへ要求を送信しないこと
+- `send` や `generate` が失敗した場合に、秘密値を発行するコマンドや受け渡し先のコマンドを、秘密値が画面に出力される形で単体実行しないこと
+
+## エラーへの対応
+
+| エラー出力 | 対応 |
+| --- | --- |
+| `The bitwarden-vault broker is not running` | `start` を実行して仲介プロセスを起動する |
+| `No item is named` | `list` で項目名を確認する。項目名は完全一致で照合される |
+| `items are named` | 同名の項目が複数存在する。利用者に Bitwarden での改名を依頼する |
+| `has no password` | 項目にパスワードが設定されていない。利用者に対象項目を確認する |
+| `does not follow the naming rule` | 命名規則に適合する項目名を利用者と決定する |
+| `bw ... failed` | 仲介プロセスのウィンドウに表示された `bw` のエラーの確認を利用者に依頼する |
