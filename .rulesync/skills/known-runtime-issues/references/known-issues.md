@@ -37,3 +37,22 @@
 - [openai/codex #52593: Windows のサンドボックス内でネイティブの realpath が EPERM を返す報告](https://github.com/openai/codex/issues/52593)
 - [openai/codex #45871: Windows の AppContainer でパスの正規化に必要なアクセスが拒否される報告](https://github.com/openai/codex/issues/45871)
 - [mise `is_persisted_ignored`: パスの正規化に失敗した設定ファイルを無視する処理](https://github.com/jdx/mise/blob/v2026.9.12/src/config/config_file/mod.rs#L796-L816)
+
+## Windows の Codex サンドボックスで Microsoft Store 版の PowerShell を起動できない
+
+一致条件:
+
+- Windows 上の Codex のサンドボックス内で実行している
+- コマンドが実行される前に `CreateProcessAsUserW failed: 5` で失敗する
+- エラーに示される起動対象の `pwsh.exe` が、`%LOCALAPPDATA%\Microsoft\WindowsApps\` 配下の実行エイリアス、または `C:\Program Files\WindowsApps\Microsoft.PowerShell_` で始まるディレクトリ配下にある
+
+対応:
+
+- 同じ PowerShell で再試行しないこと
+- cmd.exe、Microsoft Store 版以外の PowerShell、エージェントが提供するほかの実行手段など、サンドボックス内で起動できる経路を選んで同じ処理を実行する
+- サンドボックス内で起動できる経路では実行できない処理であれば、この事例に一致したことを報告して停止する
+
+出典:
+
+- [openai/codex #10090: Microsoft Store 版の PowerShell をサンドボックスが起動できない報告](https://github.com/openai/codex/issues/10090)
+- [openai/codex #18937: Codex が PATH から PowerShell の実行エイリアスを選ぶ報告](https://github.com/openai/codex/issues/18937)
