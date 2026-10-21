@@ -14,7 +14,13 @@ const ALLOWED_ENDPOINTS = [
     { host: "www.googleapis.com", pathPrefix: "/webmasters/" },
 ];
 
-const USAGE = "Usage: google-api.mjs <METHOD> <URL> [--body <json> | --body-file <path>]";
+const EXPECTED_SCOPES = [
+    "https://www.googleapis.com/auth/cloud-platform",
+    "https://www.googleapis.com/auth/analytics.readonly",
+    "https://www.googleapis.com/auth/webmasters.readonly",
+];
+
+const USAGE ="Usage: google-api.mjs <METHOD> <URL> [--body <json> | --body-file <path>]";
 
 function parseArguments(argv) {
     let parsed;
@@ -81,6 +87,29 @@ function getAccessToken() {
     }
 }
 
+async function assertExpectedScopes(token) {
+    const response = await fetch("https://oauth2.googleapis.com/tokeninfo", {
+        method: "POST",
+        body: new URLSearchParams({ access_token: token }),
+    });
+    if (!response.ok) {
+        throw new Error(`Failed to verify the scopes of Application Default Credentials: HTTP ${response.status}`);
+    }
+
+    const { scope = "" } = await response.json();
+    const granted = new Set(scope.split(" ").filter(Boolean));
+    const missing = EXPECTED_SCOPES.filter((expected) => !granted.has(expected));
+    const unexpected = [...granted].filter((actual) => !EXPECTED_SCOPES.includes(actual));
+    if (missing.length > 0 || unexpected.length > 0) {
+        throw new Error([
+            "The scopes of Application Default Credentials do not match the scopes this skill requires.",
+            `Missing: ${missing.join(" ") || "(none)"}`,
+            `Unexpected: ${unexpected.join(" ") || "(none)"}`,
+            "Recreate Application Default Credentials with the login command in references/setup.md.",
+        ].join("\n"));
+    }
+}
+
 function formatJson(text) {
     try {
         return JSON.stringify(JSON.parse(text), null, 2);
@@ -91,7 +120,9 @@ function formatJson(text) {
 
 async function main() {
     const { method, url, body } = parseArguments(process.argv.slice(2));
-    const headers = { Authorization: `Bearer ${getAccessToken()}` };
+    const token = getAccessToken();
+    await assertExpectedScopes(token);
+    const headers = { Authorization: `Bearer ${token}` };
     if (body !== undefined) {
         headers["Content-Type"] = "application/json";
     }

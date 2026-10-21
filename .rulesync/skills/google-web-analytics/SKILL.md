@@ -16,7 +16,7 @@ Google Analytics 4（以下、GA4）と Search Console の REST API を、ユー
 
 この Skill の実行には、Google Cloud CLI（`gcloud`）と、GA4 と Search Console の読み取りスコープを含めてユーザーが作成した ADC が必要である。
 
-アクセストークンの取得に失敗した場合は、[認証の準備](references/setup.md)の「診断」に従って原因を特定し、不足している手順をユーザーへ提示する。
+アクセストークンの取得または ADC のスコープの確認に失敗した場合は、[認証の準備](references/setup.md)の「診断」に従って原因を特定し、不足している手順をユーザーへ提示する。
 
 ## API の呼び出し
 

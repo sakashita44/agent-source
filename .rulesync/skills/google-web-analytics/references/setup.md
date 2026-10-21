@@ -31,7 +31,7 @@ GA4 と Search Console のスコープは Google Cloud 外の API に属する�
 gcloud auth application-default login --client-id-file=<OAuth クライアントの JSON ファイルのパス> --scopes=https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/analytics.readonly,https://www.googleapis.com/auth/webmasters.readonly
 ```
 
-このコマンドを実行すると、該当端末の既存の ADC が上書きされる。既存の ADC を別のスコープで利用している場合は、そのスコープも `--scopes` に含めること。
+このコマンドを実行すると、該当端末の既存の ADC が上書きされる。付属スクリプトは、ADC のスコープがこのコマンドの `--scopes` と完全に一致しない場合に実行を拒否する。そのため、ADC を別のスコープを要する用途と共有できない。
 
 作成後、次の各要求が成功することを確認する。
 
@@ -49,6 +49,6 @@ node <Skill のディレクトリ>/scripts/google-api.mjs GET https://www.google
 | `gcloud` を起動できない（`ENOENT`） | Google Cloud CLI が導入されていない、または PATH から解決できない | Google Cloud CLI の導入をユーザーへ依頼する |
 | `Failed to get an access token` と、ADC が見つからない旨の `gcloud` のメッセージ | 端末で ADC が作成されていない | 「端末ごとに行う準備」の実施をユーザーへ依頼する |
 | `Failed to get an access token` と、`invalid_grant` などの再認証を求めるメッセージ | リフレッシュトークンが失効または取り消されている | OAuth 同意画面の公開ステータスが `In production` であることを確認した上で、「端末ごとに行う準備」のコマンドの再実行をユーザーへ依頼する |
-| HTTP 403 と `ACCESS_TOKEN_SCOPE_INSUFFICIENT` | ADC に必要なスコープが含まれていない | 「端末ごとに行う準備」のコマンドの再実行をユーザーへ依頼する |
+| `The scopes of Application Default Credentials do not match` と、不足（`Missing`）または余分（`Unexpected`）なスコープ | ADC が「端末ごとに行う準備」のコマンドと異なるスコープで作成されている | 不足または余分なスコープを示し、「端末ごとに行う準備」のコマンドでの ADC の作り直しをユーザーへ依頼する |
 | HTTP 403 と `SERVICE_DISABLED` | OAuth クライアントを所有するプロジェクトで API が有効化されていない | ユーザーの承認を得て、「Google アカウントごとに一度行う準備」の手順 2 を実行する |
 | HTTP 403 と、ほかの行に該当しない `PERMISSION_DENIED` | 同意したアカウントに、対象の GA4 プロパティまたは Search Console のサイトの権限がない | 対象とアカウントの組み合わせをユーザーへ確認する |
