@@ -20,18 +20,27 @@ GA4 と Search Console のスコープは Google Cloud 外の API に属する�
    gcloud services enable analyticsdata.googleapis.com analyticsadmin.googleapis.com searchconsole.googleapis.com --project <プロジェクト ID>
    ```
 
-3. ユーザーが Google Cloud コンソールの Google Auth Platform で OAuth 同意画面を構成する。対象のユーザーには External を選択し、Audience のページで `Publish app` を押して公開ステータスを `In production` に設定する。公開ステータスが `Testing` の状態では、同意から 7 日で ADC のリフレッシュトークンが失効する。確認を受けていないアプリでは同意時に警告画面が表示されるが、ユーザー自身の利用には影響しない
-4. ユーザーが Google Auth Platform の Clients のページで `CREATE CLIENT` を押し、種類に Desktop app を指定して OAuth クライアントを作成し、JSON ファイルをダウンロードする。この JSON ファイルはリポジトリへ配置しないこと
+3. ユーザーが Google Cloud コンソールの Google Auth Platform で OAuth 同意画面を構成する。対象のユーザーには External（日本語表示では「外部」）を選択し、Audience（「対象」）のページで `Publish app` を押して公開ステータスを `In production`（「本番環境」）に設定する。公開ステータスが `Testing` の状態では、同意から 7 日で ADC のリフレッシュトークンが失効する。確認を受けていないアプリでは同意時に警告画面が表示されるが、ユーザー自身の利用には影響しない
+4. ユーザーが Google Auth Platform の Clients（「クライアント」）のページで `CREATE CLIENT` を押し、種類に Desktop app（「デスクトップ」）を指定して OAuth クライアントを作成し、JSON ファイルをダウンロードする
+5. ユーザーが JSON ファイルの内容をパスワードマネージャーなどに保管し、ダウンロードした JSON ファイルを削除する。JSON ファイルは各端末での ADC の作成と作り直しに用いる。JSON ファイルはリポジトリへ配置しないこと
 
 ## 端末ごとに行う準備
 
-ユーザーが OAuth クライアントの JSON ファイルを端末へ配置し、次のコマンドを実行する。コマンドの実行によってブラウザが開かれたら、GA4 と Search Console にアクセスできる Google アカウントで同意する。
+ユーザーが、保管した内容から OAuth クライアントの JSON ファイルを端末へ作成する。JSON ファイルの形式は次のとおりである。
+
+```json
+{"installed":{"client_id":"<client ID>","project_id":"<プロジェクト ID>","auth_uri":"https://accounts.google.com/o/oauth2/auth","token_uri":"https://oauth2.googleapis.com/token","auth_provider_x509_cert_url":"https://www.googleapis.com/oauth2/v1/certs","client_secret":"<client secret>","redirect_uris":["http://localhost"]}}
+```
+
+続いて、ユーザーが次のコマンドを実行する。コマンドの実行によってブラウザが開かれたら、GA4 と Search Console にアクセスできる Google アカウントで同意する。
 
 ```bash
 gcloud auth application-default login --client-id-file=<OAuth クライアントの JSON ファイルのパス> --scopes=https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/analytics.readonly,https://www.googleapis.com/auth/webmasters.readonly
 ```
 
 このコマンドを実行すると、該当端末の既存の ADC が上書きされる。付属スクリプトは、ADC のスコープがこのコマンドの `--scopes` と完全に一致しない場合に実行を拒否する。そのため、ADC を別のスコープを要する用途と共有できない。
+
+ADC の作成後、ユーザーが作成した JSON ファイルを削除する。日常の実行では JSON ファイルを用いない。
 
 作成後、次の各要求が成功することを確認する。
 
