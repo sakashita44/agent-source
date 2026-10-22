@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from "node:child_process";
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { dirname } from "node:path";
 import {
@@ -12,28 +12,39 @@ import {
     buildArbitraryCommand,
     buildFixedCommand,
     buildLoginItem,
+    canConnect,
     clientName,
+    displaySafe,
     findFolderId,
     findItemByName,
     generateArgs,
+    isProcessAlive,
     passwordOf,
+    readState,
     summarizeItems,
 } from "./vault-core.mjs";
 
 const MAX_BODY_BYTES = 64 * 1024;
 const COMMAND_TIMEOUT_MS = 2 * 60 * 1000;
 const MAX_UNLOCK_ATTEMPTS = 3;
+const TYPE_AHEAD_WINDOW_MS = 300;
+const CLOSE_DELAY_MS = 3000;
+const IMMEDIATE_ROUTES = new Set(["/status", "/stop"]);
+const CANCELLED_MESSAGE = "リクエストが取り消されたか、終了の処理が始まったため、実行しませんでした。";
 
 const token = randomBytes(32).toString("hex");
+const shutdownController = new AbortController();
+const rememberedApprovals = new Set();
 let session = null;
 let server = null;
 let idleTimer = null;
 let shuttingDown = false;
 let queue = Promise.resolve();
-const rememberedApprovals = new Set();
+let activeWork = Promise.resolve();
+let workRunning = false;
 
 function say(...lines) {
-    process.stdout.write(lines.map((line) => `${line}\n`).join(""));
+    process.stdout.write(lines.map((line) => `${displaySafe(line)}\n`).join(""));
 }
 
 function section(title) {
@@ -43,6 +54,10 @@ function section(title) {
 
 function sayDetails(rows) {
     say(...rows.map(([label, value]) => `  ${label}: ${value}`));
+}
+
+function delay(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function readHidden(prompt) {
@@ -81,16 +96,36 @@ function readHidden(prompt) {
     });
 }
 
-function readLine(prompt) {
+function readLine(prompt, signal) {
     return new Promise((resolve) => {
         const stdin = process.stdin;
+        if (signal?.aborted) {
+            resolve(null);
+            return;
+        }
         process.stdout.write(prompt);
-        stdin.setEncoding("utf8");
-        stdin.resume();
-        stdin.once("data", (chunk) => {
+        const shownAt = Date.now();
+        const finish = (answer) => {
+            stdin.off("data", onData);
+            signal?.removeEventListener("abort", onAbort);
             stdin.pause();
-            resolve(String(chunk).split(/\r?\n/)[0].trim());
-        });
+            resolve(answer);
+        };
+        // コンソールの入力バッファに残った先行入力は、表示の直後に届く。直後の入力を無視し、利用者が表示を見る前の承認を防ぐ。
+        const onData = (chunk) => {
+            if (Date.now() - shownAt < TYPE_AHEAD_WINDOW_MS) {
+                return;
+            }
+            finish(String(chunk).split(/\r?\n/)[0].trim());
+        };
+        const onAbort = () => {
+            process.stdout.write("\n");
+            finish(null);
+        };
+        stdin.setEncoding("utf8");
+        stdin.on("data", onData);
+        signal?.addEventListener("abort", onAbort, { once: true });
+        stdin.resume();
     });
 }
 
@@ -137,7 +172,17 @@ async function loadVault() {
     return { items: JSON.parse(items), folders: JSON.parse(folders) };
 }
 
-async function confirm(question, { strict = false, rememberable = false } = {}) {
+async function track(work) {
+    workRunning = true;
+    activeWork = work.catch(() => {});
+    try {
+        return await work;
+    } finally {
+        workRunning = false;
+    }
+}
+
+async function confirm(question, signal, { strict = false, rememberable = false } = {}) {
     say("");
     if (strict) {
         say(question, "実行する場合は yes と入力してください。それ以外の入力では実行しません。");
@@ -151,7 +196,11 @@ async function confirm(question, { strict = false, rememberable = false } = {}) 
     } else {
         say(`${question} [y/N]`);
     }
-    const answer = await readLine("> ");
+    const answer = await readLine("> ", signal);
+    if (answer === null || signal.aborted) {
+        say("", CANCELLED_MESSAGE);
+        return { approved: false, cancelled: true };
+    }
     resetIdleTimer();
     const remember = rememberable && answer.toLowerCase() === "a";
     const approved = strict ? answer === "yes" : remember || /^y(es)?$/i.test(answer);
@@ -161,14 +210,18 @@ async function confirm(question, { strict = false, rememberable = false } = {}) 
     } else if (remember) {
         say("承認しました。このウィンドウを閉じるまで、同じ項目と送信先の組み合わせは自動で承認されます。");
     }
-    return { approved, remember };
+    return { approved, remember, cancelled: false };
 }
 
 function runWithSecret({ file, args, appendNewline }, secret) {
     return new Promise((resolve) => {
         say("--- コマンドの出力 (ここから) ---");
         const child = spawn(file, args, { stdio: ["pipe", "inherit", "inherit"], windowsHide: true });
-        const timer = setTimeout(() => child.kill(), COMMAND_TIMEOUT_MS);
+        let timedOut = false;
+        const timer = setTimeout(() => {
+            timedOut = true;
+            child.kill();
+        }, COMMAND_TIMEOUT_MS);
         let settled = false;
         const settle = (code, message) => {
             if (settled) {
@@ -183,7 +236,10 @@ function runWithSecret({ file, args, appendNewline }, secret) {
             resolve(code);
         };
         child.on("error", (error) => settle(null, `コマンドを起動できませんでした (${error.message})。実行ファイルのパスを確認してください。`));
-        child.on("close", (code) => settle(code));
+        child.on("close", (code) => settle(
+            timedOut ? null : code,
+            timedOut ? `コマンドが ${COMMAND_TIMEOUT_MS / 60000} 分以内に終了しなかったため、停止しました。` : undefined,
+        ));
         // 子プロセスが標準入力をすべて読み取る前に終了すると EPIPE が発生する。処理の成否は終了コードで判定する。
         child.stdin.on("error", () => {});
         child.stdin.end(appendNewline ? `${secret}\n` : secret);
@@ -201,7 +257,7 @@ async function handleList({ search, client }) {
     return { items: filtered };
 }
 
-async function handleSend({ item: itemName, target, options = {}, command, reason, client }) {
+async function handleSend({ item: itemName, target, options = {}, command, reason, client }, signal) {
     const requester = clientName(client);
     const explanation = assertReason(reason);
     const arbitrary = target === "command";
@@ -225,16 +281,20 @@ async function handleSend({ item: itemName, target, options = {}, command, reaso
     if (approvalKey !== null && rememberedApprovals.has(approvalKey)) {
         say("", "この項目と送信先の組み合わせは承認済みのため、自動で承認しました。");
     } else {
-        const { approved, remember } = await confirm(plan.question, { strict: arbitrary, rememberable: !arbitrary });
+        const { approved, remember, cancelled } = await confirm(plan.question, signal, { strict: arbitrary, rememberable: !arbitrary });
         if (!approved) {
-            return { approved: false };
+            return { approved: false, cancelled };
         }
         if (remember) {
             rememberedApprovals.add(approvalKey);
         }
     }
+    if (signal.aborted) {
+        say(CANCELLED_MESSAGE);
+        return { approved: false, cancelled: true };
+    }
 
-    const exitCode = await runWithSecret(plan, secret);
+    const exitCode = await track(runWithSecret(plan, secret));
     if (exitCode === 0) {
         say(plan.done);
     } else if (exitCode !== null) {
@@ -243,7 +303,7 @@ async function handleSend({ item: itemName, target, options = {}, command, reaso
     return { approved: true, exitCode };
 }
 
-async function handleGenerate({ name, folder, length = 32, special = false, reason, client }) {
+async function handleGenerate({ name, folder, length = 32, special = false, reason, client }, signal) {
     const explanation = assertReason(reason);
     assertItemName(name);
     const args = generateArgs(length, special);
@@ -259,14 +319,21 @@ async function handleGenerate({ name, folder, length = 32, special = false, reas
         ["生成する値", `${args.slice(1).join(" ")} (bw generate のオプション)`],
         [`${clientName(client)} の説明`, explanation],
     ]);
-    if (!(await confirm(`新しい項目 ${name} を作成し、生成した値を保存しますか？`)).approved) {
-        return { approved: false };
+    const { approved, cancelled } = await confirm(`新しい項目 ${name} を作成し、生成した値を保存しますか？`, signal);
+    if (!approved) {
+        return { approved: false, cancelled };
+    }
+    if (signal.aborted) {
+        say(CANCELLED_MESSAGE);
+        return { approved: false, cancelled: true };
     }
 
-    const password = (await checkedBw(args)).trim();
-    // bw create は Base64 でエンコードされた JSON を入力として受け取る。
-    const encoded = Buffer.from(JSON.stringify(buildLoginItem({ name, folderId, password }))).toString("base64");
-    await checkedBw(["create", "item"], { input: encoded });
+    await track((async () => {
+        const password = (await checkedBw(args)).trim();
+        // bw create は Base64 でエンコードされた JSON を入力として受け取る。
+        const encoded = Buffer.from(JSON.stringify(buildLoginItem({ name, folderId, password }))).toString("base64");
+        await checkedBw(["create", "item"], { input: encoded });
+    })());
     say(`項目 ${name} を作成し、生成した値をパスワードとして保存しました。値は ${clientName(client)} に返していません。`);
     return { approved: true, name };
 }
@@ -324,10 +391,14 @@ function readBody(request) {
             }
         });
         request.on("error", reject);
+        request.on("close", () => reject(new Error("The request was cancelled.")));
     });
 }
 
 function respond(response, status, body) {
+    if (response.destroyed) {
+        return;
+    }
     response.writeHead(status, { "Content-Type": "application/json" });
     response.end(JSON.stringify(body));
 }
@@ -342,30 +413,78 @@ function handleRequest(request, response, port) {
         respond(response, 404, { ok: false, error: "Not found." });
         return;
     }
-    const title = ROUTE_TITLES[request.url];
-    const task = queue.then(async () => {
-        const body = await readBody(request);
-        if (title) {
-            section(`${title} (${clientName(body.client)})`);
+    // ServerResponse の close は正常に応答し終えたときにも発生するため、応答を書き終える前の close だけを切断とみなす。
+    const disconnected = new AbortController();
+    response.on("close", () => {
+        if (!response.writableEnded) {
+            disconnected.abort();
         }
-        return route(body);
     });
-    queue = task.catch(() => {});
+    const signal = AbortSignal.any([disconnected.signal, shutdownController.signal]);
+    const body = readBody(request);
+    body.catch(() => {});
+    const title = ROUTE_TITLES[request.url];
+    const execute = async () => {
+        const payload = await body;
+        if (signal.aborted) {
+            throw new Error("The request was cancelled.");
+        }
+        if (title) {
+            section(`${title} (${clientName(payload.client)})`);
+        }
+        return route(payload, signal);
+    };
+    let task;
+    if (IMMEDIATE_ROUTES.has(request.url)) {
+        task = execute();
+    } else {
+        task = queue.then(execute);
+        queue = task.catch(() => {});
+    }
     task.then(
         (result) => respond(response, 200, { ok: true, ...result }),
         (error) => {
-            say(`リクエストを処理できませんでした。理由: ${error.message}`);
+            if (!signal.aborted) {
+                say(`リクエストを処理できませんでした。理由: ${error.message}`);
+            }
             respond(response, 400, { ok: false, error: error.message });
         },
     );
 }
 
-function removeStateFile() {
-    if (!existsSync(STATE_FILE)) {
-        return;
+function createStateFile() {
+    try {
+        writeFileSync(STATE_FILE, JSON.stringify({ pid: process.pid, ready: false }), { flag: "wx", mode: 0o600 });
+        return true;
+    } catch (error) {
+        if (error.code === "EEXIST") {
+            return false;
+        }
+        throw error;
     }
-    const state = JSON.parse(readFileSync(STATE_FILE, "utf8"));
-    if (state.pid === process.pid) {
+}
+
+async function isStale(state) {
+    if (!state || !isProcessAlive(state.pid)) {
+        return true;
+    }
+    return state.ready === true && !(await canConnect(state.port));
+}
+
+async function claimStateFile() {
+    mkdirSync(dirname(STATE_FILE), { recursive: true });
+    if (createStateFile()) {
+        return true;
+    }
+    if (!(await isStale(readState()))) {
+        return false;
+    }
+    rmSync(STATE_FILE, { force: true });
+    return createStateFile();
+}
+
+function removeOwnStateFile() {
+    if (readState()?.pid === process.pid) {
         rmSync(STATE_FILE, { force: true });
     }
 }
@@ -375,9 +494,9 @@ function shutdown(reason) {
         return;
     }
     shuttingDown = true;
+    shutdownController.abort();
     clearTimeout(idleTimer);
     server?.close();
-    removeStateFile();
     section("終了");
     if (session) {
         const result = spawnSync("bw", ["lock"], { env: bwEnv(), stdio: "ignore", windowsHide: true });
@@ -388,9 +507,10 @@ function shutdown(reason) {
     } else {
         say(`${reason}、終了します。`);
     }
-    say("このウィンドウは 3 秒後に閉じます。");
+    removeOwnStateFile();
+    say(workRunning ? "実行中のコマンドが終わってから、このウィンドウを閉じます。" : "このウィンドウは 3 秒後に閉じます。");
     // stop の HTTP 応答を返し終え、利用者がウィンドウの最終表示を確認できるまで待機してから終了する。
-    setTimeout(() => process.exit(0), 3000);
+    Promise.all([activeWork, delay(CLOSE_DELAY_MS)]).then(() => process.exit(0));
 }
 
 async function unlock() {
@@ -418,6 +538,11 @@ async function unlock() {
     return false;
 }
 
+async function closeAfterEnter() {
+    await readLine("Enter キーを押すと、このウィンドウを閉じます。");
+    process.exit(1);
+}
+
 async function main() {
     process.title = "bitwarden-vault";
     say(
@@ -425,16 +550,19 @@ async function main() {
         "このウィンドウで、Bitwarden の金庫のロック解除と、秘密値の送信や保存の承認を行います。",
         "",
     );
+    if (!(await claimStateFile())) {
+        say("別の bitwarden-vault のウィンドウが既に起動しているため、終了します。既に開いているウィンドウを使ってください。");
+        await closeAfterEnter();
+    }
     if (!(await unlock())) {
-        await readLine("Enter キーを押すと、このウィンドウを閉じます。");
-        process.exit(1);
+        removeOwnStateFile();
+        await closeAfterEnter();
     }
 
     server = createServer((request, response) => handleRequest(request, response, server.address().port));
     await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
     const { port } = server.address();
-    mkdirSync(dirname(STATE_FILE), { recursive: true });
-    writeFileSync(STATE_FILE, JSON.stringify({ port, token, pid: process.pid }), { mode: 0o600 });
+    writeFileSync(STATE_FILE, JSON.stringify({ port, token, pid: process.pid, ready: true }), { mode: 0o600 });
     resetIdleTimer();
     say(
         "",

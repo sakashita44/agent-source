@@ -30,7 +30,7 @@
 - Git: Git 操作を行う Skill を実行する場合
 - GitHub CLI（`gh`）: `pr-merge` に付属する `.mjs` を実行する場合と、`bitwarden-vault` で GitHub Actions の secret へ登録する場合
 - Google Cloud CLI（`gcloud`）と Application Default Credentials: `google-web-analytics` を実行する場合。準備の手順は `google-web-analytics` の [認証の準備](.rulesync/skills/google-web-analytics/references/setup.md) を参照のこと
-- Bitwarden CLI（`bw`）とログイン済みのアカウント: `bitwarden-vault` を実行する場合。`bitwarden-vault` は Windows でだけ動作する
+- Bitwarden CLI のネイティブ版の実行ファイル（`bw.exe`）とログイン済みのアカウント: `bitwarden-vault` を実行する場合。`bitwarden-vault` は Windows でだけ動作する。npm で導入した Bitwarden CLI は対象外とする
 
 サンドボックスを使うエージェントでは、サンドボックス内からも各実行基盤を起動し、それぞれの管理領域へ書き込める必要がある。ただし Windows の Codex では、mise の shim がサンドボックス内で版を解決できないため、mise の shim を経由して起動する実行基盤はサンドボックスの外で実行する。この指示は Codex にだけ配布するルール（`.rulesync/rules/04-sandbox-codex.md`）に定める。
 

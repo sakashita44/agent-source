@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { realpathSync } from "node:fs";
+import { request } from "node:http";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { STATE_FILE, clientName } from "./vault-core.mjs";
+import { clientName, isProcessAlive, readState } from "./vault-core.mjs";
 
 const START_WAIT_MS = 90 * 1000;
 const POLL_INTERVAL_MS = 2000;
+const LAUNCH_GRACE_MS = 10 * 1000;
 
 const USAGE = [
     "Usage (every command accepts --client <name>: the name the user gave the agent, or its product name such as Claude Code):",
@@ -15,7 +17,7 @@ const USAGE = [
     "  bw-vault.mjs status",
     "  bw-vault.mjs list [--search <text>]",
     "  bw-vault.mjs send gh-secret --item <name> --repo <owner/name> --name <SECRET_NAME> [--env <environment>] --reason <text>",
-    "  bw-vault.mjs send ssh-sudo --item <name> --host <host> [--ssh <absolute path to ssh.exe>] --reason <text>",
+    "  bw-vault.mjs send ssh-sudo --item <name> --host <host> [--ssh <C:\\...\\ssh.exe>] --reason <text>",
     "  bw-vault.mjs send command --item <name> --reason <text> -- <command> [args...]",
     "  bw-vault.mjs generate --name <name> [--folder <folder>] [--length <16-128>] [--special] --reason <text>",
     "  bw-vault.mjs stop",
@@ -23,29 +25,55 @@ const USAGE = [
 
 const NOT_RUNNING = "The bitwarden-vault broker is not running. Run `bw-vault.mjs start` and ask the user to enter the master password in the window that opens.";
 
+const NOT_UNLOCKED = "The bitwarden-vault window is open, but the vault is not unlocked yet. Ask the user to enter the master password in the bitwarden-vault window, then run `bw-vault.mjs status`.";
+
 class BrokerUnavailableError extends Error {}
 
-function readState() {
-    if (!existsSync(STATE_FILE)) {
-        throw new BrokerUnavailableError(NOT_RUNNING);
-    }
-    return JSON.parse(readFileSync(STATE_FILE, "utf8"));
+function liveBrokerState() {
+    const state = readState();
+    return state && isProcessAlive(state.pid) ? state : null;
+}
+
+function post(port, token, path, body) {
+    return new Promise((resolve, reject) => {
+        const payload = JSON.stringify(body);
+        const call = request({
+            host: "127.0.0.1",
+            port,
+            path,
+            method: "POST",
+            headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+                "Content-Length": Buffer.byteLength(payload),
+            },
+        }, (response) => {
+            const chunks = [];
+            response.on("data", (chunk) => chunks.push(chunk));
+            response.on("end", () => {
+                try {
+                    resolve(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+                } catch {
+                    reject(new Error(`The bitwarden-vault broker returned an invalid response (HTTP ${response.statusCode}).`));
+                }
+            });
+        });
+        call.on("error", (error) => reject(error.code === "ECONNREFUSED"
+            ? new BrokerUnavailableError(NOT_RUNNING)
+            : new Error(`Lost the connection to the bitwarden-vault broker (${error.code ?? error.message}). Ask the user to check the bitwarden-vault window.`)));
+        call.end(payload);
+    });
 }
 
 export async function callBroker(path, body = {}) {
-    const { port, token } = readState();
-    let response;
-    try {
-        response = await fetch(`http://127.0.0.1:${port}${path}`, {
-            method: "POST",
-            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-            redirect: "error",
-        });
-    } catch {
+    const state = liveBrokerState();
+    if (!state) {
         throw new BrokerUnavailableError(NOT_RUNNING);
     }
-    const result = await response.json();
+    if (!state.ready) {
+        throw new BrokerUnavailableError(NOT_UNLOCKED);
+    }
+    const result = await post(state.port, state.token, path, body);
     if (!result.ok) {
         throw new Error(result.error);
     }
@@ -78,24 +106,34 @@ async function isRunning() {
 }
 
 async function start(client) {
-    if (await isRunning()) {
-        return { started: false, message: "The broker is already running and the vault is unlocked." };
-    }
     if (process.platform !== "win32") {
         throw new Error("bitwarden-vault supports Windows only.");
     }
-    launchBroker(client);
-    const deadline = Date.now() + START_WAIT_MS;
-    while (Date.now() < deadline) {
-        await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+    let existing = liveBrokerState();
+    if (existing?.ready) {
         if (await isRunning()) {
-            return { started: true, message: "The vault is unlocked." };
+            return { started: false, message: "The broker is already running and the vault is unlocked." };
+        }
+        existing = null;
+    }
+    if (!existing) {
+        launchBroker(client);
+    }
+    const launchedAt = Date.now();
+    let seen = Boolean(existing);
+    while (Date.now() - launchedAt < START_WAIT_MS) {
+        await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+        const state = liveBrokerState();
+        if (state) {
+            seen = true;
+            if (state.ready && await isRunning()) {
+                return { started: !existing, message: "The vault is unlocked." };
+            }
+        } else if (seen || Date.now() - launchedAt > LAUNCH_GRACE_MS) {
+            throw new Error("The bitwarden-vault window closed before the vault was unlocked. Ask the user what the window showed, then run start again.");
         }
     }
-    return {
-        started: true,
-        message: "The broker window is open, but the vault is not unlocked yet. Ask the user to enter the master password in the bitwarden-vault window, then run `bw-vault.mjs status`.",
-    };
+    return { started: !existing, message: NOT_UNLOCKED };
 }
 
 function parse(argv) {
@@ -135,8 +173,13 @@ export async function run(argv) {
     switch (action) {
         case "start":
             return start(client);
-        case "status":
+        case "status": {
+            const state = liveBrokerState();
+            if (state && !state.ready) {
+                return { unlocked: false, message: NOT_UNLOCKED };
+            }
             return callBroker("/status");
+        }
         case "list":
             return callBroker("/list", { search: values.search, client });
         case "send": {

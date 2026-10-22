@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from "node:fs";
+import { connect } from "node:net";
 import { homedir } from "node:os";
 import { join, win32 } from "node:path";
 
@@ -10,8 +12,12 @@ const ITEM_NAME_PATTERN = /^[A-Za-z0-9]+(?:[A-Za-z0-9.]*)-(?:Token|Account|KeyPa
 const REPO_PATTERN = /^[A-Za-z0-9_][A-Za-z0-9_.-]*\/[A-Za-z0-9_][A-Za-z0-9_.-]*$/;
 const SECRET_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const ENVIRONMENT_PATTERN = /^[A-Za-z0-9_][A-Za-z0-9_.-]*$/;
-const HOST_PATTERN = /^[A-Za-z0-9_][A-Za-z0-9_.-]*$/;
+const HOST_PATTERN = /^(?:[A-Za-z0-9_][A-Za-z0-9_.-]*@)?[A-Za-z0-9_][A-Za-z0-9_.-]*$/;
 const SSH_FILE_PATTERN = /^ssh(\.exe)?$/i;
+// UNC パスと、Git Bash 形式のパス (/usr/bin/ssh) を除くため、ドライブ文字で始まるパスに限る。
+const LOCAL_DRIVE_PATH_PATTERN = /^[A-Za-z]:[\\/]/;
+// 制御文字 (Cc) は端末の制御シーケンスで画面を書き換え、書式制御文字 (Cf) は双方向テキストの制御で表示順を入れ替える。
+const UNSAFE_DISPLAY_CHARACTERS = /[\p{Cc}\p{Cf}]/gu;
 const CLIENT_PATTERN = /^[\p{L}\p{N}][\p{L}\p{N} ._-]{0,39}$/u;
 const MIN_GENERATED_LENGTH = 16;
 const MAX_GENERATED_LENGTH = 128;
@@ -92,8 +98,8 @@ export function buildFixedCommand(target, options) {
             if (typeof host !== "string" || !HOST_PATTERN.test(host)) {
                 throw new Error(`Invalid host: ${JSON.stringify(host)}.`);
             }
-            if (ssh !== "ssh" && (typeof ssh !== "string" || !win32.isAbsolute(ssh) || !SSH_FILE_PATTERN.test(win32.basename(ssh)))) {
-                throw new Error(`Invalid ssh executable: ${JSON.stringify(ssh)}. Give an absolute path to ssh or ssh.exe.`);
+            if (ssh !== "ssh" && (typeof ssh !== "string" || !LOCAL_DRIVE_PATH_PATTERN.test(ssh) || !SSH_FILE_PATTERN.test(win32.basename(ssh)))) {
+                throw new Error(`Invalid ssh executable: ${JSON.stringify(ssh)}. Give a Windows path to ssh.exe that starts with a drive letter, such as C:\\Windows\\System32\\OpenSSH\\ssh.exe.`);
             }
             return {
                 file: ssh,
@@ -179,4 +185,41 @@ export function assertReason(reason) {
         throw new Error("Give --reason to explain the request to the user.");
     }
     return reason.trim();
+}
+
+export function displaySafe(text) {
+    return String(text).replace(UNSAFE_DISPLAY_CHARACTERS, (char) => `\\u{${char.codePointAt(0).toString(16)}}`);
+}
+
+export function readState() {
+    if (!existsSync(STATE_FILE)) {
+        return null;
+    }
+    try {
+        const state = JSON.parse(readFileSync(STATE_FILE, "utf8"));
+        return Number.isInteger(state?.pid) ? state : null;
+    } catch {
+        return null;
+    }
+}
+
+export function isProcessAlive(pid) {
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch (error) {
+        // シグナル 0 は存在の確認だけを行う。EPERM は、送信の権限がないもののプロセスは存在することを示す。
+        return error.code === "EPERM";
+    }
+}
+
+export function canConnect(port) {
+    return new Promise((resolve) => {
+        const socket = connect({ host: "127.0.0.1", port });
+        socket.once("connect", () => {
+            socket.destroy();
+            resolve(true);
+        });
+        socket.once("error", () => resolve(false));
+    });
 }

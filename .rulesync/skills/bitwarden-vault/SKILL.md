@@ -13,7 +13,7 @@ description: >-
 
 利用者の Bitwarden の金庫にある秘密値を、エージェントが値を直接参照せずに利用する。金庫のロック解除と秘密値の受け渡しは、利用者のデスクトップ上のウィンドウで動作する仲介プロセスが担う。エージェントは付属スクリプトを用いて仲介プロセスへ要求を送信し、成否のみを受け取る。
 
-この Skill は Windows でのみ動作する。実行には Bitwarden CLI（`bw`）へのログインが必要であり、`gh-secret` への送信には GitHub CLI（`gh`）の認証が必要である。
+この Skill は Windows でのみ動作する。実行には、ネイティブ版の Bitwarden CLI の実行ファイル（`bw.exe`）が `PATH` にあり、ログイン済みであることが必要である。npm で導入した Bitwarden CLI（`bw.cmd`）は対象外とする。`gh-secret` への送信には GitHub CLI（`gh`）の認証が必要である。
 
 ## 仲介プロセスの起動
 
@@ -37,7 +37,9 @@ Windows の Codex では、仲介プロセスの起動と付属スクリプト�
 
 ## 操作
 
-`send` と `generate` は、仲介プロセスのウィンドウで利用者が承認した場合に限り実行される。`--reason` には、利用者が承認の可否を判断できるよう、目的と影響を日本語で具体的に指定すること。応答の `approved` が `false` の場合は、利用者が要求を拒否したことを示す。理由を利用者に確認し、同じ要求を繰り返さないこと。
+`send` と `generate` は、仲介プロセスのウィンドウで利用者が承認した場合に限り実行される。`--reason` には、利用者が承認の可否を判断できるよう、目的と影響を日本語で具体的に指定すること。応答の `approved` が `false` の場合は、利用者が要求を拒否したことを示す。理由を利用者に確認し、同じ要求を繰り返さないこと。ただし `cancelled` が `true` の場合は、利用者の拒否ではなく、仲介プロセスの終了による取り消しである。`start` で仲介プロセスを起動し直してから、同じ要求をやり直してよい。
+
+`send` と `generate` は、利用者が承認するまで応答を返さない。コマンドの実行に時間制限があるエージェントでは、制限を 10 分程度に設定すること。応答を待たずに付属スクリプトが中断された場合、そのリクエストは取り消され、利用者が後から承認しても実行されない。
 
 項目名の一覧を取得する。応答には項目名、フォルダ、種別、パスワードの有無が含まれる。
 
@@ -51,10 +53,10 @@ node <Skill のディレクトリ>/scripts/bw-vault.mjs list [--search <文字�
 node <Skill のディレクトリ>/scripts/bw-vault.mjs send gh-secret --item <項目名> --repo <owner/name> --name <Secret 名> [--env <環境名>] --reason <説明>
 ```
 
-ssh で接続したリモートホストで `sudo -S -v` を実行し、sudo の認証を更新する。sudo の認証が失効し、`sudo -n` が失敗した場合に用いる。対象ホストにおいて、sudo の認証キャッシュがセッション間で共有される設定（sudoers の `timestamp_type=global`）を前提とする。仲介プロセスが `PATH` から解決する ssh は起動元のシェルによって異なり、対象ホストへの認証に必要な鍵を使用できない場合がある。`--ssh` には、エージェント自身が対象ホストへ接続できた ssh の実行ファイルを絶対パスで指定すること。実行ファイルのパスは `command -v ssh` または `(Get-Command ssh).Source` で確認できる。
+ssh で接続したリモートホストで `sudo -S -v` を実行し、sudo の認証を更新する。sudo の認証が失効し、`sudo -n` が失敗した場合に用いる。対象ホストにおいて、sudo の認証キャッシュがセッション間で共有される設定（sudoers の `timestamp_type=global`）を前提とする。仲介プロセスが `PATH` から解決する ssh は起動元のシェルによって異なり、対象ホストへの認証に必要な鍵を使用できない場合がある。`--ssh` には、エージェント自身が対象ホストへ接続できた ssh の実行ファイルを、ドライブ文字から始まる Windows のパスで指定すること。パスは PowerShell の `(Get-Command ssh).Source` または `where.exe ssh` で確認できる。Git Bash の `command -v ssh` が返す `/usr/bin/ssh` の形式は受け付けられないため、`cygpath -w "$(command -v ssh)"` で変換する。`--host` には、`~/.ssh/config` の Host 名、ホスト名、`ユーザー名@ホスト名` のいずれかを指定する。
 
 ```bash
-node <Skill のディレクトリ>/scripts/bw-vault.mjs send ssh-sudo --item <項目名> --host <ssh の接続先> --ssh <ssh の実行ファイルの絶対パス> --reason <説明>
+node <Skill のディレクトリ>/scripts/bw-vault.mjs send ssh-sudo --item <項目名> --host <ssh の接続先> --ssh <ssh.exe のパス> --reason <説明>
 ```
 
 固定の送信先（`gh-secret`、`ssh-sudo`）では、利用者が「a」を入力して承認すると、仲介プロセスが終了するまで同じ項目と送信先の組み合わせが自動で承認される。
@@ -67,7 +69,7 @@ node <Skill のディレクトリ>/scripts/bw-vault.mjs send command --item <項
 
 `send` の応答に含まれる `exitCode` は、受け渡し先のコマンドの終了コードである。コマンドの出力は仲介プロセスのウィンドウにのみ表示されるため、失敗した場合は利用者にウィンドウの表示内容の確認を依頼すること。
 
-ランダムな値を生成し、新しいログイン項目のパスワードとして保存する。利用者が手動で入力する必要のない秘密値に限って用いる。項目名は `{対象サービス}-{種別}-{ラベル}` の形式とし、種別は `Token`、`Account`、`KeyPair` のいずれかとする。同名の項目がすでに存在する場合は拒否される。
+ランダムな値を生成し、新しいログイン項目のパスワードとして保存する。利用者が手動で入力する必要のない秘密値に限って用いる。項目名は `{対象サービス}-{種別}-{ラベル}` の形式とし、種別は `Token`、`Account`、`KeyPair` のいずれかとする。対象サービスには ASCII の英数字と `.` を、ラベルには ASCII の英数字と `.`、`_`、`-` を用いる。同名の項目がすでに存在する場合は拒否される。
 
 ```bash
 node <Skill のディレクトリ>/scripts/bw-vault.mjs generate --name <項目名> [--folder <フォルダ名>] [--length <16〜128>] [--special] --reason <説明>
@@ -86,6 +88,9 @@ node <Skill のディレクトリ>/scripts/bw-vault.mjs generate --name <項目�
 | エラー出力 | 対応 |
 | --- | --- |
 | `The bitwarden-vault broker is not running` | `start` を実行して仲介プロセスを起動する |
+| `the vault is not unlocked yet` | 利用者にウィンドウでのマスターパスワードの入力を依頼し、入力後に `status` で確認する。bitwarden-vault のウィンドウが開いていない場合は、PC の再起動などで残った状態ファイルである。利用者に状態ファイルの削除を依頼してから `start` を再実行する |
+| `window closed before the vault was unlocked` | ウィンドウに表示された内容を利用者に確認し、原因を解消してから `start` を再実行する |
+| `Lost the connection to the bitwarden-vault broker` | 利用者にウィンドウの表示内容の確認を依頼する。同じリクエストを繰り返す前に、前のリクエストが実行されたかを利用者に確認する |
 | `No item is named` | `list` で項目名を確認する。項目名は完全一致で照合される |
 | `items are named` | 同名の項目が複数存在する。利用者に Bitwarden での改名を依頼する |
 | `has no password` | 項目にパスワードが設定されていない。利用者に対象項目を確認する |

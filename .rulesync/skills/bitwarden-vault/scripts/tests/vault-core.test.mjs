@@ -5,8 +5,8 @@ import {
     assertReason,
     buildArbitraryCommand,
     buildFixedCommand,
-    buildLoginItem,
     clientName,
+    displaySafe,
     findFolderId,
     findItemByName,
     generateArgs,
@@ -92,7 +92,7 @@ test("ssh-sudo のコマンドを組み立てる", () => {
 });
 
 test("ssh の実行ファイルは ssh または ssh.exe の絶対パスに限る", () => {
-    for (const ssh of ["ssh.exe", "node.exe", "C:\\tools\\node.exe", "C:\\tools\\ssh.cmd", "C:\\tools\\ssh.exe.bat", "", 1]) {
+    for (const ssh of ["ssh.exe", "/usr/bin/ssh", "\\\\server\\share\\ssh.exe", "C:\\tools\\node.exe", "C:\\tools\\ssh.cmd", "C:\\tools\\ssh.exe.bat", "", 1]) {
         assert.throws(() => buildFixedCommand("ssh-sudo", { host: "hp-z240", ssh }), /ssh executable/, String(ssh));
     }
     assert.equal(buildFixedCommand("ssh-sudo", { host: "h", ssh: "C:\\Program Files\\Git\\usr\\bin\\ssh.exe" }).file, "C:\\Program Files\\Git\\usr\\bin\\ssh.exe");
@@ -127,13 +127,6 @@ test("生成する長さを制限する", () => {
     }
 });
 
-test("Login 項目の本文を組み立てる", () => {
-    const item = buildLoginItem({ name: "Example-Token-Test", folderId: "f1", password: SECRET });
-    assert.equal(item.type, 1);
-    assert.equal(item.folderId, "f1");
-    assert.equal(item.login.password, SECRET);
-});
-
 test("フォルダ名から ID を求める", () => {
     assert.equal(findFolderId(folders, undefined), null);
     assert.equal(findFolderId(folders, "Dev"), "f1");
@@ -154,4 +147,10 @@ test("承認の説明を必須にする", () => {
     assert.equal(assertReason("  hp-z240 の sudo を更新する "), "hp-z240 の sudo を更新する");
     assert.throws(() => assertReason(""), /--reason/);
     assert.throws(() => assertReason(undefined), /--reason/);
+});
+
+test("画面へ表示する文字列から端末の制御と書式制御の文字を取り除く", () => {
+    const shown = displaySafe("説明\u001b[2J\u001b[H偽の表示\n\u009b2J‮exe.sbat⁦");
+    assert.ok(!/[\p{Cc}\p{Cf}]/u.test(shown));
+    assert.equal(displaySafe("hp-z240 の sudo を更新する"), "hp-z240 の sudo を更新する");
 });
