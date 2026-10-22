@@ -614,6 +614,8 @@ async function main() {
         say("別の bitwarden-vault のウィンドウが既に起動しているため、終了します。既に開いているウィンドウを使ってください。");
         await closeAfterEnter();
     }
+    say(`${idleLimitMinutes} 分以内にマスターパスワードを入力しない場合は、このウィンドウが閉じます。`, "");
+    resetIdleTimer();
     if (!(await unlock())) {
         removeOwnStateFile();
         await closeAfterEnter();
