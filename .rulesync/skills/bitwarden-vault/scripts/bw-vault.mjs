@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { request } from "node:http";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { clientName, idleMinutes, isProcessAlive, readState } from "./vault-core.mjs";
+import { clientName, idleMinutes, isProcessAlive, listDetails, readState } from "./vault-core.mjs";
 
 const START_WAIT_MS = 90 * 1000;
 const POLL_INTERVAL_MS = 2000;
@@ -15,7 +15,10 @@ const USAGE = [
     "Usage (every command accepts --client <name>: the name the user gave the agent, or its product name such as Claude Code):",
     "  bw-vault.mjs start [--idle-minutes <15-720>]",
     "  bw-vault.mjs status",
-    "  bw-vault.mjs list [--search <text>]",
+    "  bw-vault.mjs list [--search <text>] [--with uris,username,dates,fields,flags]",
+    "  bw-vault.mjs notes (--item <name> [--item <name>...] | --search <text> | --all) --reason <text>",
+    "  bw-vault.mjs edit --item <name> [--rename <name>] [--notes <text> | --append-notes <text>] [--uris <json>] --reason <text>",
+    "  bw-vault.mjs report [--check-exposed]",
     "  bw-vault.mjs send gh-secret --item <name> --repo <owner/name> --name <SECRET_NAME> [--env <environment>] --reason <text>",
     "  bw-vault.mjs send ssh-sudo --item <name> --host <host> [--ssh <C:\\...\\ssh.exe>] --reason <text>",
     "  bw-vault.mjs send command --item <name> --reason <text> -- <command> [args...]",
@@ -146,6 +149,50 @@ async function start(client, requestedMinutes) {
     return { started: !existing, message: NOT_UNLOCKED };
 }
 
+async function brokerStatus() {
+    const state = liveBrokerState();
+    if (!state) {
+        return { unlocked: false, message: NOT_RUNNING };
+    }
+    if (!state.ready) {
+        return { unlocked: false, message: NOT_UNLOCKED };
+    }
+    try {
+        const { ok, ...status } = await callBroker("/status");
+        return status;
+    } catch (error) {
+        if (error instanceof BrokerUnavailableError) {
+            return { unlocked: false, message: error.message };
+        }
+        throw error;
+    }
+}
+
+// bw status は秘密値もセッションキーも出力しないため、仲介プロセスを介さずに実行する。
+function bitwardenStatus() {
+    const result = spawnSync("bw", ["status"], {
+        encoding: "utf8",
+        env: { ...process.env, BW_NOINTERACTION: "true" },
+        windowsHide: true,
+    });
+    if (result.error || result.status !== 0) {
+        return { error: `bw status failed (${result.error?.code ?? `exit code ${result.status}`}). Check that the native bw.exe is on PATH.` };
+    }
+    try {
+        const { serverUrl, lastSync, userEmail } = JSON.parse(result.stdout);
+        return { serverUrl, lastSync, userEmail };
+    } catch {
+        return { error: "bw status returned an invalid response." };
+    }
+}
+
+function singleItem(items) {
+    if (!Array.isArray(items) || items.length !== 1) {
+        throw new Error(`Give exactly one --item.\n${USAGE}`);
+    }
+    return items[0];
+}
+
 function parse(argv) {
     let parsed;
     try {
@@ -154,7 +201,14 @@ function parse(argv) {
             allowPositionals: true,
             options: {
                 search: { type: "string" },
-                item: { type: "string" },
+                with: { type: "string" },
+                all: { type: "boolean" },
+                item: { type: "string", multiple: true },
+                rename: { type: "string" },
+                notes: { type: "string" },
+                "append-notes": { type: "string" },
+                uris: { type: "string" },
+                "check-exposed": { type: "boolean" },
                 repo: { type: "string" },
                 name: { type: "string" },
                 env: { type: "string" },
@@ -184,20 +238,29 @@ export async function run(argv) {
     switch (action) {
         case "start":
             return start(client, values["idle-minutes"]);
-        case "status": {
-            const state = liveBrokerState();
-            if (state && !state.ready) {
-                return { unlocked: false, message: NOT_UNLOCKED };
-            }
-            return callBroker("/status");
-        }
+        case "status":
+            return { ...(await brokerStatus()), bitwarden: bitwardenStatus() };
         case "list":
-            return callBroker("/list", { search: values.search, client });
+            return callBroker("/list", { search: values.search, details: listDetails(values.with).join(","), client });
+        case "notes":
+            return callBroker("/notes", { items: values.item, search: values.search, all: values.all, reason: values.reason, client });
+        case "edit":
+            return callBroker("/edit", {
+                item: singleItem(values.item),
+                rename: values.rename,
+                notes: values.notes,
+                appendNotes: values["append-notes"],
+                uris: values.uris,
+                reason: values.reason,
+                client,
+            });
+        case "report":
+            return callBroker("/report", { checkExposed: values["check-exposed"] ?? false, client });
         case "send": {
             const options = target === "gh-secret"
                 ? { repo: values.repo, name: values.name, env: values.env }
                 : { host: values.host, ssh: values.ssh };
-            return callBroker("/send", { item: values.item, target, options, command, reason: values.reason, client });
+            return callBroker("/send", { item: singleItem(values.item), target, options, command, reason: values.reason, client });
         }
         case "generate":
             return callBroker("/generate", {

@@ -8,6 +8,7 @@ import { StringDecoder } from "node:string_decoder";
 import {
     DEFAULT_IDLE_MINUTES,
     STATE_FILE,
+    applyEdit,
     assertItemName,
     assertReason,
     buildArbitraryCommand,
@@ -15,6 +16,7 @@ import {
     buildLoginItem,
     canConnect,
     clientName,
+    describeUris,
     displaySafe,
     displaySafeOutput,
     findFolderId,
@@ -22,8 +24,13 @@ import {
     generateArgs,
     idleMinutes,
     isProcessAlive,
+    listDetails,
+    needsNoteApproval,
+    noteContents,
+    parseUris,
     passwordOf,
     readState,
+    summarizeHealth,
     summarizeItems,
 } from "./vault-core.mjs";
 
@@ -283,15 +290,184 @@ function runWithSecret({ file, args, appendNewline }, secret) {
     });
 }
 
-async function handleList({ search, client }) {
+const DETAIL_LABELS = {
+    uris: "URI と判定方法",
+    username: "ユーザー名",
+    dates: "作成・更新日時",
+    fields: "カスタムフィールドの名前と種別",
+    flags: "メモと TOTP の有無などの設定",
+};
+
+function matchesSearch(name, search) {
+    return typeof search !== "string" || search.length === 0 || name.toLowerCase().includes(search.toLowerCase());
+}
+
+async function handleList({ search, details, client }) {
+    const requested = listDetails(details);
     const { items, folders } = await loadVault();
-    const summaries = summarizeItems(items, folders);
-    const filtered = typeof search === "string" && search.length > 0
-        ? summaries.filter((item) => item.name.toLowerCase().includes(search.toLowerCase()))
-        : summaries;
-    const condition = filtered === summaries ? "" : `検索語「${search}」に一致する`;
-    say(`${condition}項目 ${filtered.length} 件の名前、フォルダ、種別を ${clientName(client)} に返しました。秘密値を含まないため、承認なしで実行しました。`);
-    return { items: filtered };
+    const summaries = summarizeItems(items, folders, requested).filter((item) => matchesSearch(item.name, search));
+    const condition = matchesSearch("", search) ? "" : `検索語「${search}」に一致する`;
+    const labels = ["名前", "フォルダ", "種別", ...requested.map((detail) => DETAIL_LABELS[detail])];
+    say(`${condition}項目 ${summaries.length} 件の${labels.join("、")}を ${clientName(client)} に返しました。秘密値を含まないため、承認なしで実行しました。`);
+    return { items: summaries };
+}
+
+function selectItems(items, { names, search, all }) {
+    if (Array.isArray(names) && names.length > 0) {
+        return names.map((name) => findItemByName(items, name));
+    }
+    if (all === true || (typeof search === "string" && search.length > 0)) {
+        return items.filter((item) => !item.deletedDate && matchesSearch(item.name, search));
+    }
+    throw new Error("Give --item, --search, or --all to choose the items.");
+}
+
+function showContents(contents) {
+    say(`■ ${contents.name}`);
+    if (contents.notes !== null) {
+        say("  メモ:", ...contents.notes.replace(/\r\n/g, "\n").split("\n").map((line) => `    ${line}`));
+    }
+    for (const field of contents.fields) {
+        if (field.type === "text" && typeof field.value === "string" && field.value.length > 0) {
+            say(`  フィールド ${field.name}: ${field.value}`);
+        }
+    }
+    say("");
+}
+
+async function handleNotes({ items: names, search, all, reason, client }, signal) {
+    const requester = clientName(client);
+    const explanation = assertReason(reason);
+    const { items } = await loadVault();
+    if (signal.aborted) {
+        return cancelRequest();
+    }
+    const selected = selectItems(items, { names, search, all });
+    const contents = selected.map(noteContents);
+    const pending = selected.filter((_, index) => needsNoteApproval(contents[index]));
+
+    const emptyCount = selected.length - pending.length;
+    sayDetails([
+        ["対象", `${selected.length} 件 (うち、メモかテキストのフィールドに記入がある項目: ${pending.length} 件)`],
+        [`${requester} の説明`, explanation],
+    ]);
+    if (pending.length === 0) {
+        say("", `どの項目もメモとテキストのフィールドが空のため、承認なしで、空であることを ${requester} に渡しました。`);
+        return { approved: true, items: contents };
+    }
+    say(
+        "",
+        ...(emptyCount > 0 ? [`メモとテキストのフィールドがどちらも空の ${emptyCount} 件は、空であることだけを ${requester} に渡します。`] : []),
+        `メモかテキストのフィールドに記入がある ${pending.length} 件は、その内容を ${requester} に渡します。隠しフィールドの値は渡しません。`,
+        "",
+        `次の内容が ${requester} に渡されます。秘密値などが含まれていないか確認してから承認してください。`,
+        "",
+    );
+    contents.filter(needsNoteApproval).forEach(showContents);
+    // マスターパスワードの再要求は、利用者が特に慎重に扱う項目に設定するため、y ではなく yes の入力で承認させる。
+    const strict = pending.some((item) => item.reprompt === 1);
+    if (strict) {
+        say("マスターパスワードの再要求が設定された項目が含まれています。", "");
+    }
+    say(
+        `  ${strict ? "yes" : "y"}: 表示した内容と、空の項目の結果を渡す`,
+        `  ${strict ? "それ以外" : "N"}: どの項目の内容も ${requester} に渡さない${strict ? "" : " (既定)"}`,
+    );
+    const { approved, cancelled } = await confirm(`この内容を ${requester} に渡しますか？`, signal, { strict });
+    if (!approved) {
+        if (!cancelled) {
+            say(`どの項目の内容も ${requester} に渡していません。`);
+        }
+        return { approved: false, cancelled };
+    }
+    if (signal.aborted) {
+        return cancelRequest();
+    }
+    say(emptyCount > 0
+        ? `記入がある ${pending.length} 件の内容と、空の ${emptyCount} 件の結果を ${requester} に渡しました。`
+        : `${pending.length} 件のメモとフィールドを ${requester} に渡しました。`);
+    return { approved: true, items: contents };
+}
+
+function sayBlock(label, lines) {
+    say(`  ${label}:`, ...lines.map((line) => `    ${line}`));
+}
+
+function notesLines(notes) {
+    return typeof notes === "string" && notes.length > 0 ? notes.replace(/\r\n/g, "\n").split("\n") : ["(なし)"];
+}
+
+async function handleEdit({ item: itemName, rename, notes, appendNotes, uris, reason, client }, signal) {
+    const requester = clientName(client);
+    const explanation = assertReason(reason);
+    const parsedUris = uris === undefined ? undefined : parseUris(uris);
+    const { items } = await loadVault();
+    if (signal.aborted) {
+        return cancelRequest();
+    }
+    const item = findItemByName(items, itemName);
+    const changes = { name: rename, notes, appendNotes, uris: parsedUris };
+    const preview = applyEdit(item, changes);
+    if (rename !== undefined && items.some((other) => !other.deletedDate && other.id !== item.id && other.name === preview.name)) {
+        throw new Error(`An item named ${JSON.stringify(preview.name)} already exists.`);
+    }
+
+    sayDetails([["項目", item.name], [`${requester} の説明`, explanation]]);
+    say("");
+    if (preview.name !== item.name) {
+        sayBlock("名前 (変更前)", [item.name]);
+        sayBlock("名前 (変更後)", [preview.name]);
+    }
+    if (preview.notes !== item.notes) {
+        sayBlock("メモ (変更前)", notesLines(item.notes));
+        sayBlock("メモ (変更後)", notesLines(preview.notes));
+    }
+    if (parsedUris !== undefined) {
+        sayBlock("URI (変更前)", describeUris(item.login?.uris ?? []));
+        sayBlock("URI (変更後)", describeUris(parsedUris));
+    }
+    const { approved, cancelled } = await confirm(`項目 ${item.name} をこの内容で変更しますか？`, signal);
+    if (!approved) {
+        return { approved: false, cancelled };
+    }
+    if (signal.aborted) {
+        return cancelRequest();
+    }
+
+    await track((async () => {
+        // bw edit item は項目全体を置き換える。承認を待つ間に別の端末で加えられた変更を上書きしないよう、同期してから更新日時を照合する。
+        await checkedBw(["sync"]);
+        const current = JSON.parse(await checkedBw(["get", "item", item.id]));
+        if (current.revisionDate !== item.revisionDate) {
+            say("承認を待つ間に、この項目が別の場所で変更されたため、保存しませんでした。");
+            throw new Error(`Item ${JSON.stringify(item.name)} was changed elsewhere while waiting for approval. Run edit again.`);
+        }
+        const encoded = Buffer.from(JSON.stringify(applyEdit(current, changes))).toString("base64");
+        await checkedBw(["edit", "item", item.id], { input: encoded });
+    })());
+    say(`項目 ${item.name} を変更しました。`);
+    return { approved: true, name: preview.name };
+}
+
+async function handleReport({ checkExposed = false, client }) {
+    // bw report password-health は既定で Have I Been Pwned へ照合を問い合わせるため、明示された場合に限って外部へ通信する。
+    const args = ["report", "password-health"];
+    if (checkExposed !== true) {
+        args.push("--no-check-exposed");
+    }
+    await checkedBw(["sync"]);
+    const report = summarizeHealth(JSON.parse(await checkedBw(args)), { exposed: checkExposed === true });
+    const weak = report.filter((entry) => typeof entry.passwordStrength === "number" && entry.passwordStrength < 3).length;
+    const reused = report.filter((entry) => typeof entry.reuseCount === "number" && entry.reuseCount > 1).length;
+    say(
+        `${report.length} 件のログイン項目について、パスワードの強度と使い回しの状況を ${clientName(client)} に返しました。パスワードそのものは返していません。`,
+        `  強度が 3 未満: ${weak} 件、使い回し: ${reused} 件`,
+    );
+    if (checkExposed === true) {
+        const exposed = report.filter((entry) => entry.exposed === true).length;
+        say(`  既知の漏えいに該当: ${exposed} 件 (Have I Been Pwned に、パスワードのハッシュの先頭 5 文字を送って照合しました)`);
+    }
+    return { items: report };
 }
 
 async function handleSend({ item: itemName, target, options = {}, command, reason, client }, signal) {
@@ -384,6 +560,9 @@ const ROUTES = {
     "/list": handleList,
     "/send": handleSend,
     "/generate": handleGenerate,
+    "/notes": handleNotes,
+    "/edit": handleEdit,
+    "/report": handleReport,
     "/stop": async ({ client }) => {
         setImmediate(() => shutdown(`${clientName(client)} から終了のリクエストを受けたため`));
         return { stopping: true };
@@ -394,6 +573,9 @@ const ROUTE_TITLES = {
     "/list": "項目一覧の取得リクエスト",
     "/send": "秘密値の送信リクエスト",
     "/generate": "秘密値の生成・保存リクエスト",
+    "/notes": "メモとフィールドの値の読み取りリクエスト",
+    "/edit": "項目の変更リクエスト",
+    "/report": "パスワードの健全性の報告リクエスト",
 };
 
 function resetIdleTimer() {
@@ -599,7 +781,7 @@ async function main() {
     process.title = "bitwarden-vault";
     say(
         `${clientName(process.argv[2])} がこのウィンドウを起動しました。`,
-        "このウィンドウで、Bitwarden の金庫のロック解除と、秘密値の送信や保存の承認を行います。",
+        "このウィンドウで、Bitwarden の金庫のロック解除と、秘密値の送信や保存、項目の内容の読み取りや変更の承認を行います。",
         "",
     );
     idleLimitMinutes = idleMinutes(process.argv[3]);

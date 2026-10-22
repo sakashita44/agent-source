@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+    applyEdit,
     assertItemName,
     assertReason,
     buildArbitraryCommand,
@@ -12,7 +13,12 @@ import {
     findItemByName,
     generateArgs,
     idleMinutes,
+    listDetails,
+    needsNoteApproval,
+    noteContents,
+    parseUris,
     passwordOf,
+    summarizeHealth,
     summarizeItems,
 } from "../vault-core.mjs";
 
@@ -58,6 +64,57 @@ test("一覧は秘密値を含まず、ゴミ箱の項目を除く", () => {
     });
     assert.equal(summaries.find((item) => item.name === "Google-Account-University").hasPassword, false);
     assert.equal(summaries.find((item) => item.name === "Recovery-Note").folder, null);
+});
+
+test("一覧の追加情報は指定したものだけを返し、値を含めない", () => {
+    const item = {
+        id: "7", name: "Example-Account-Main", type: 1, notes: SECRET, favorite: true, reprompt: 1,
+        creationDate: "2026-01-01T00:00:00Z", revisionDate: "2026-02-01T00:00:00Z",
+        login: { username: "saka", password: SECRET, totp: SECRET, passwordRevisionDate: null, uris: [{ uri: "https://example.com", match: null }, { uri: "https://a.example.com", match: 1 }] },
+        fields: [{ name: "PIN", value: SECRET, type: 0 }, { name: "API", value: SECRET, type: 1 }],
+    };
+    assert.deepEqual(Object.keys(summarizeItems([item], [])[0]), ["name", "folder", "type", "hasPassword"]);
+    const [summary] = summarizeItems([item], [], listDetails("uris,username,dates,fields,flags"));
+    assert.ok(!JSON.stringify(summary).includes(SECRET));
+    assert.deepEqual(summary.uris, [{ uri: "https://example.com", match: "default" }, { uri: "https://a.example.com", match: "host" }]);
+    assert.equal(summary.username, "saka");
+    assert.deepEqual(summary.fields, [{ name: "PIN", type: "text" }, { name: "API", type: "hidden" }]);
+    assert.deepEqual([summary.hasNotes, summary.hasTotp, summary.favorite, summary.reprompt], [true, true, true, true]);
+    assert.throws(() => listDetails("uris,password"), /Unknown --with/);
+});
+
+test("メモとテキストのフィールドが空の項目だけを承認なしで返せる", () => {
+    const empty = noteContents({ name: "A", notes: null, fields: [{ name: "Remember", value: "true", type: 2 }, { name: "API", value: SECRET, type: 1 }] });
+    assert.equal(needsNoteApproval(empty), false);
+    assert.ok(!JSON.stringify(empty).includes(SECRET));
+    assert.equal(needsNoteApproval(noteContents({ name: "B", notes: SECRET })), true);
+    assert.equal(needsNoteApproval(noteContents({ name: "C", notes: "", fields: [{ name: "PIN", value: SECRET, type: 0 }] })), true);
+});
+
+test("項目の変更は名前、メモ、URI 以外を保つ", () => {
+    const item = {
+        id: "8", type: 1, name: "Old-Token-X", notes: "1 行目", revisionDate: "r1", fields: [{ name: "API", value: SECRET, type: 1 }],
+        passwordHistory: [{ password: SECRET }],
+        login: { username: "saka", password: SECRET, totp: null, fido2Credentials: [{ id: "k" }], uris: [{ match: null, uri: "https://old.example.com" }] },
+    };
+    const edited = applyEdit(item, { name: " New-Token-X ", appendNotes: "2 行目", uris: parseUris('[{"uri":"https://new.example.com","match":"exact"}]') });
+    assert.equal(edited.name, "New-Token-X");
+    assert.equal(edited.notes, "1 行目\n2 行目");
+    assert.deepEqual(edited.login.uris, [{ match: 3, uri: "https://new.example.com" }]);
+    const strip = ({ name, notes, login: { uris, ...login }, ...rest }) => ({ ...rest, login });
+    assert.deepEqual(strip(edited), strip(item));
+    assert.equal(item.name, "Old-Token-X");
+    assert.equal(applyEdit(item, { notes: "" }).notes, null);
+    assert.throws(() => applyEdit(item, {}), /at least one/);
+    assert.throws(() => applyEdit(item, { notes: "a", appendNotes: "b" }), /either/);
+    assert.throws(() => applyEdit({ ...item, type: 2 }, { uris: [] }), /not a login/);
+    assert.throws(() => parseUris('[{"uri":"https://x","match":"fuzzy"}]'), /Unknown match/);
+});
+
+test("健全性の報告から許可したフィールドだけを残す", () => {
+    const report = [{ object: "password-health", id: "1", name: "A", passwordStrength: 1, reuseCount: 2, exposed: false, password: SECRET }];
+    assert.deepEqual(summarizeHealth(report)[0], { name: "A", passwordStrength: 1, reuseCount: 2 });
+    assert.deepEqual(summarizeHealth(report, { exposed: true })[0], { name: "A", passwordStrength: 1, reuseCount: 2, exposed: false });
 });
 
 test("項目名の完全一致で 1 件に絞る", () => {
