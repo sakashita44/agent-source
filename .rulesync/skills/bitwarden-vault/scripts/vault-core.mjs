@@ -9,6 +9,13 @@ const MAX_IDLE_MINUTES = 12 * 60;
 
 // Bitwarden の項目種別（CipherType）を表す数値。
 const ITEM_TYPES = { 1: "login", 2: "note", 3: "card", 4: "identity", 5: "sshKey" };
+// Bitwarden のカスタムフィールドの種別（FieldType）と、URI の自動入力の判定方法（UriMatchType）を表す数値。null はアプリの既定の判定方法に従うことを示す。
+const FIELD_TYPES = { 0: "text", 1: "hidden", 2: "boolean", 3: "linked" };
+const URI_MATCHES = { default: null, domain: 0, host: 1, startsWith: 2, exact: 3, regex: 4, never: 5 };
+const LIST_DETAILS = ["uris", "username", "dates", "fields", "flags"];
+// bw report password-health の出力のうち、エージェントに返す項目。CLI の版によって出力に情報が増えても返さないよう、許可した項目に限る。
+const HEALTH_FIELDS = ["name", "passwordStrength", "reuseCount"];
+const EXPOSURE_FIELDS = ["exposed", "exposedCount", "exposedError"];
 const ITEM_NAME_PATTERN = /^[A-Za-z0-9]+(?:[A-Za-z0-9.]*)-(?:Token|Account|KeyPair)-[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const REPO_PATTERN = /^[A-Za-z0-9_][A-Za-z0-9_.-]*\/[A-Za-z0-9_][A-Za-z0-9_.-]*$/;
 const SECRET_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -30,17 +37,145 @@ export function assertItemName(name) {
     return name;
 }
 
-export function summarizeItems(items, folders) {
+export function listDetails(value) {
+    if (value === undefined) {
+        return [];
+    }
+    const details = String(value).split(",").map((detail) => detail.trim()).filter((detail) => detail.length > 0);
+    const unknown = details.filter((detail) => !LIST_DETAILS.includes(detail));
+    if (unknown.length > 0) {
+        throw new Error(`Unknown --with value: ${unknown.join(", ")}. Use ${LIST_DETAILS.join(", ")}.`);
+    }
+    return [...new Set(details)];
+}
+
+function nonEmpty(value) {
+    return typeof value === "string" && value.length > 0;
+}
+
+function fieldTypeName(type) {
+    return FIELD_TYPES[type] ?? `unknown(${type})`;
+}
+
+function matchName(match) {
+    const name = Object.keys(URI_MATCHES).find((key) => URI_MATCHES[key] === (match ?? null));
+    return name ?? `unknown(${match})`;
+}
+
+const DETAIL_BUILDERS = {
+    uris: (item) => ({ uris: (item.login?.uris ?? []).map((uri) => ({ uri: uri.uri, match: matchName(uri.match) })) }),
+    username: (item) => ({ username: item.login?.username ?? null }),
+    dates: (item) => ({
+        created: item.creationDate ?? null,
+        revised: item.revisionDate ?? null,
+        passwordRevised: item.login?.passwordRevisionDate ?? null,
+    }),
+    fields: (item) => ({ fields: (item.fields ?? []).map((field) => ({ name: field.name, type: fieldTypeName(field.type) })) }),
+    flags: (item) => ({
+        hasNotes: nonEmpty(item.notes),
+        hasTotp: nonEmpty(item.login?.totp),
+        favorite: item.favorite === true,
+        reprompt: item.reprompt === 1,
+    }),
+};
+
+export function summarizeItems(items, folders, details = []) {
     const folderNames = new Map(folders.map((folder) => [folder.id, folder.name]));
     return items
         .filter((item) => !item.deletedDate)
-        .map((item) => ({
-            name: item.name,
-            folder: item.folderId ? folderNames.get(item.folderId) ?? null : null,
-            type: ITEM_TYPES[item.type] ?? `unknown(${item.type})`,
-            hasPassword: typeof item.login?.password === "string" && item.login.password.length > 0,
-        }))
+        .map((item) => Object.assign(
+            {
+                name: item.name,
+                folder: item.folderId ? folderNames.get(item.folderId) ?? null : null,
+                type: ITEM_TYPES[item.type] ?? `unknown(${item.type})`,
+                hasPassword: nonEmpty(item.login?.password),
+            },
+            ...details.map((detail) => DETAIL_BUILDERS[detail](item)),
+        ))
         .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export function noteContents(item) {
+    const fields = (item.fields ?? []).map((field) => {
+        const type = fieldTypeName(field.type);
+        // 隠しフィールドには API キーなどの秘密値が格納されるため、値は text と boolean に限って返す。
+        return type === "text" || type === "boolean" ? { name: field.name, type, value: field.value ?? null } : { name: field.name, type };
+    });
+    return { name: item.name, notes: nonEmpty(item.notes) ? item.notes : null, fields };
+}
+
+// メモとテキストのフィールドにはリカバリーコードなどの秘密値が書かれることがあるため、値がある場合に限り承認を求める。
+export function needsNoteApproval(contents) {
+    return contents.notes !== null || contents.fields.some((field) => field.type === "text" && nonEmpty(field.value));
+}
+
+export function parseUris(json) {
+    let uris;
+    try {
+        uris = JSON.parse(json);
+    } catch {
+        throw new Error("--uris must be a JSON array such as [{\"uri\":\"https://example.com\",\"match\":\"host\"}].");
+    }
+    if (!Array.isArray(uris)) {
+        throw new Error("--uris must be a JSON array.");
+    }
+    return uris.map((entry) => {
+        const { uri, match = "default" } = entry ?? {};
+        if (!nonEmpty(uri)) {
+            throw new Error(`Each URI needs a non-empty "uri": ${JSON.stringify(entry)}.`);
+        }
+        if (!Object.hasOwn(URI_MATCHES, match)) {
+            throw new Error(`Unknown match ${JSON.stringify(match)}. Use ${Object.keys(URI_MATCHES).join(", ")}.`);
+        }
+        return { uri, match };
+    });
+}
+
+export function describeUris(uris) {
+    return uris.length === 0 ? ["(なし)"] : uris.map(({ uri, match }) => `${uri} (判定: ${typeof match === "string" ? match : matchName(match)})`);
+}
+
+export function applyEdit(item, { name, notes, appendNotes, uris }) {
+    if (notes !== undefined && appendNotes !== undefined) {
+        throw new Error("Give either --notes or --append-notes, not both.");
+    }
+    if (name === undefined && notes === undefined && appendNotes === undefined && uris === undefined) {
+        throw new Error("Give at least one of --rename, --notes, --append-notes, or --uris.");
+    }
+    if (uris !== undefined && item.type !== 1) {
+        throw new Error(`Item ${JSON.stringify(item.name)} is not a login item, so it has no URIs.`);
+    }
+    const edited = structuredClone(item);
+    if (name !== undefined) {
+        if (!nonEmpty(name.trim())) {
+            throw new Error("--rename must not be empty.");
+        }
+        edited.name = name.trim();
+    }
+    if (notes !== undefined) {
+        edited.notes = nonEmpty(notes) ? notes : null;
+    }
+    if (appendNotes !== undefined) {
+        if (!nonEmpty(appendNotes)) {
+            throw new Error("--append-notes must not be empty.");
+        }
+        edited.notes = nonEmpty(item.notes) ? `${item.notes}\n${appendNotes}` : appendNotes;
+    }
+    if (uris !== undefined) {
+        edited.login.uris = uris.map(({ uri, match }) => ({ match: URI_MATCHES[match], uri }));
+    }
+    return edited;
+}
+
+// 照合を省略した場合も bw は exposed: false を出力するため、照合した場合に限って漏えいの項目を返し、未照合を「該当なし」と誤読させない。
+export function summarizeHealth(report, { exposed = false } = {}) {
+    if (!Array.isArray(report)) {
+        throw new Error("bw report password-health returned an unexpected format.");
+    }
+    const keys = exposed ? [...HEALTH_FIELDS, ...EXPOSURE_FIELDS] : HEALTH_FIELDS;
+    return report
+        .map((entry) => Object.fromEntries(keys.filter((key) => Object.hasOwn(entry, key)).map((key) => [key, entry[key]])))
+        .sort((a, b) => String(a.name).localeCompare(String(b.name)));
 }
 
 export function findItemByName(items, name) {

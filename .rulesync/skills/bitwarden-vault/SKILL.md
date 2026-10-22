@@ -2,10 +2,12 @@
 name: bitwarden-vault
 description: >-
   Use when a task needs a secret stored in the user's Bitwarden vault without
-  seeing it, such as listing item names to reconcile them with a credential
-  ledger, registering a secret as a GitHub Actions secret, refreshing sudo
-  authentication on a remote host over ssh, or generating and saving a new
-  random secret. A broker process in a window on the user's Windows desktop
+  seeing it, or needs to take stock of or tidy up the vault, such as listing
+  items with their URIs and usernames to reconcile them with a credential
+  ledger, reading notes, renaming items or updating their notes and URIs,
+  checking password strength and reuse, registering a secret as a GitHub
+  Actions secret, refreshing sudo authentication on a remote host over ssh,
+  or generating and saving a new random secret. A broker process in a window on the user's Windows desktop
   holds the unlocked vault and asks the user to approve each transfer.
 ---
 
@@ -27,7 +29,7 @@ node <Skill のディレクトリ>/scripts/bw-vault.mjs start --client <エー�
 
 起動すると新しいウィンドウが表示されるため、利用者にそのウィンドウでマスターパスワードの入力を依頼する。スクリプトは最大 90 秒間、ロック解除を待機する。待機中に解除されなかった場合は、利用者の入力完了後に `status` を実行して状態を確認する。
 
-利用者がウィンドウで 15 分間操作しない場合は、金庫がロックされ、仲介プロセスが終了する。リクエストの送信は操作に含まれない。作業完了後は `stop` を実行して終了させること。
+利用者がウィンドウで 15 分間操作しない場合は、金庫がロックされ、仲介プロセスが終了する。ロックの解除前も同様に、15 分以内にマスターパスワードが入力されない場合は終了する。リクエストの送信は操作に含まれない。作業完了後は `stop` を実行して終了させること。
 
 利用者が明示的に指示した場合に限り、`start` に `--idle-minutes <分>` を付けて、ロックまでの時間を 15〜720 分の範囲で延ばしてよい。夜間の長時間のテストなど、作業の途中で利用者が操作できない場合に用いる。延ばした時間はウィンドウの冒頭に表示され、利用者はロックを解除する前に確認できる。起動中の仲介プロセスの時間は変更できないため、変更する場合は `stop` を実行してから、指定し直して起動すること。
 
@@ -39,14 +41,51 @@ Windows の Codex では、仲介プロセスの起動と付属スクリプト�
 
 ## 操作
 
-`send` と `generate` は、仲介プロセスのウィンドウで利用者が承認した場合に限り実行される。`--reason` には、利用者が承認の可否を判断できるよう、目的と影響を日本語で具体的に指定すること。応答の `approved` が `false` の場合は、利用者が要求を拒否したことを示す。理由を利用者に確認し、同じ要求を繰り返さないこと。ただし `cancelled` が `true` の場合は、利用者の拒否ではなく、仲介プロセスの終了による取り消しである。`start` で仲介プロセスを起動し直してから、同じ要求をやり直してよい。
+`send`、`generate`、`edit` と、内容のある項目を対象とする `notes` は、仲介プロセスのウィンドウで利用者が承認した場合に限り実行される。`--reason` には、利用者が承認の可否を判断できるよう、目的と影響を日本語で具体的に指定すること。応答の `approved` が `false` の場合は、利用者が要求を拒否したことを示す。理由を利用者に確認し、同じ要求を繰り返さないこと。ただし `cancelled` が `true` の場合は、利用者の拒否ではなく、仲介プロセスの終了による取り消しである。`start` で仲介プロセスを起動し直してから、同じ要求をやり直してよい。
 
-`send` と `generate` は、利用者が承認するまで応答を返さない。コマンドの実行に時間制限があるエージェントでは、制限を 10 分程度に設定すること。応答を待たずに付属スクリプトが中断された場合、そのリクエストは取り消され、利用者が後から承認しても実行されない。
+承認を求める操作は、利用者が承認するまで応答を返さない。コマンドの実行に時間制限があるエージェントでは、制限を 10 分程度に設定すること。応答を待たずに付属スクリプトが中断された場合、そのリクエストは取り消され、利用者が後から承認しても実行されない。
 
-項目名の一覧を取得する。応答には項目名、フォルダ、種別、パスワードの有無が含まれる。
+項目名の一覧を取得する。応答には項目名、フォルダ、種別、パスワードの有無が含まれる。アーカイブした項目とゴミ箱の項目は含まれない。
 
 ```bash
-node <Skill のディレクトリ>/scripts/bw-vault.mjs list [--search <文字列>]
+node <Skill のディレクトリ>/scripts/bw-vault.mjs list [--search <文字列>] [--with <追加の情報>]
+```
+
+`--with` には、棚卸しなどで必要な追加の情報だけを、次の値からコンマ区切りで指定する。応答が大きくなるため、不要な情報は指定しないこと。いずれも秘密値を含まないため、承認なしで返される。
+
+- `uris`: URI と、URI ごとの自動入力の判定方法（`default`、`domain`、`host`、`startsWith`、`exact`、`regex`、`never`）。`default` は Bitwarden のアプリの既定の設定に従うことを示す。既定の設定そのものは取得できない
+- `username`: ユーザー名
+- `dates`: 作成日時、更新日時、パスワードの最終変更日時
+- `fields`: カスタムフィールドの名前と種別。値は含まれない
+- `flags`: メモと TOTP の有無、お気に入り、マスターパスワードの再要求の設定
+
+メモの本文と、テキストのカスタムフィールドの値を読み取る。対象は `--item` の繰り返し、`--search`、`--all` のいずれかで指定する。メモとテキストのフィールドが空の項目は承認なしで返される。空でない項目がある場合は、仲介プロセスのウィンドウに内容が一覧で表示され、利用者が 1 回の承認でまとめて許可する。隠しフィールドの値は返されない。メモにはリカバリーコードなどの秘密値が書かれていることがあるため、対象は作業に必要な項目に絞ること。
+
+```bash
+node <Skill のディレクトリ>/scripts/bw-vault.mjs notes (--item <項目名> [--item <項目名>...] | --search <文字列> | --all) --reason <説明>
+```
+
+項目の名前、メモ、URI を変更する。パスワード、ユーザー名、TOTP、カスタムフィールドは変更できない。変更前と変更後の内容が仲介プロセスのウィンドウに表示され、利用者が承認した場合に限り保存される。承認を待つ間に別の場所で同じ項目が変更された場合は、保存されずにエラーとなる。
+
+```bash
+node <Skill のディレクトリ>/scripts/bw-vault.mjs edit --item <項目名> [--rename <新しい項目名>] [--notes <メモ> | --append-notes <追記する文>] [--uris <JSON>] --reason <説明>
+```
+
+- `--rename`: 新しい項目名は `{対象サービス}-{種別}-{ラベル}` の命名規則に従うこと（規則は `generate` の説明を参照のこと）。同名の項目がすでに存在する場合は拒否される
+- `--notes`: メモ全体を置き換える。空文字列を指定するとメモを削除する。既存のメモを置き換える場合は、先に `notes` で内容を確認すること
+- `--append-notes`: 既存のメモの末尾に、改行を挟んで追記する
+- `--uris`: URI の一覧全体を置き換える。`[{"uri":"https://example.com","match":"host"}]` の形式の JSON 配列で指定し、`match` を省略すると `default` となる。既存の URI を残す場合は、`list --with uris` で取得した一覧に追加して指定すること
+
+ログイン項目のパスワードの強度（0〜4）と、金庫内での使い回しの回数を取得する。応答にパスワードそのものは含まれない。`--check-exposed` を指定すると、既知の漏えいに該当するかも照合する。照合では、パスワードのハッシュの先頭 5 文字が Have I Been Pwned へ送信されるため、利用者が漏えいの照合を求めた場合に限って指定すること。
+
+```bash
+node <Skill のディレクトリ>/scripts/bw-vault.mjs report [--check-exposed]
+```
+
+`status` は、仲介プロセスの状態に加えて、Bitwarden CLI の接続先のサーバー URL、最終同期日時、ログイン中のアカウントを `bitwarden` に返す。仲介プロセスを起動していなくても実行できる。
+
+```bash
+node <Skill のディレクトリ>/scripts/bw-vault.mjs status
 ```
 
 項目のパスワードを GitHub Actions の secret に登録する。
@@ -97,4 +136,6 @@ node <Skill のディレクトリ>/scripts/bw-vault.mjs generate --name <項目�
 | `items are named` | 同名の項目が複数存在する。利用者に Bitwarden での改名を依頼する |
 | `has no password` | 項目にパスワードが設定されていない。利用者に対象項目を確認する |
 | `does not follow the naming rule` | 命名規則に適合する項目名を利用者と決定する |
+| `already exists` | 同名の項目が存在する。別の項目名を利用者と決定する |
+| `was changed elsewhere` | `list` や `notes` で最新の内容を確認してから、`edit` を再実行する |
 | `bw ... failed` | 仲介プロセスのウィンドウに表示された `bw` のエラーの確認を利用者に依頼する |
