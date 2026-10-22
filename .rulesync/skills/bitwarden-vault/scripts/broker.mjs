@@ -6,7 +6,7 @@ import { createServer } from "node:http";
 import { dirname } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import {
-    IDLE_TIMEOUT_MS,
+    DEFAULT_IDLE_MINUTES,
     STATE_FILE,
     assertItemName,
     assertReason,
@@ -20,6 +20,7 @@ import {
     findFolderId,
     findItemByName,
     generateArgs,
+    idleMinutes,
     isProcessAlive,
     passwordOf,
     readState,
@@ -38,6 +39,7 @@ const token = randomBytes(32).toString("hex");
 const shutdownController = new AbortController();
 const rememberedApprovals = new Set();
 let session = null;
+let idleLimitMinutes = DEFAULT_IDLE_MINUTES;
 let server = null;
 let idleTimer = null;
 let shuttingDown = false;
@@ -378,7 +380,7 @@ async function handleGenerate({ name, folder, length = 32, special = false, reas
 }
 
 const ROUTES = {
-    "/status": async () => ({ unlocked: true, idleTimeoutMinutes: IDLE_TIMEOUT_MS / 60000 }),
+    "/status": async () => ({ unlocked: true, idleTimeoutMinutes: idleLimitMinutes }),
     "/list": handleList,
     "/send": handleSend,
     "/generate": handleGenerate,
@@ -396,7 +398,7 @@ const ROUTE_TITLES = {
 
 function resetIdleTimer() {
     clearTimeout(idleTimer);
-    idleTimer = setTimeout(() => shutdown(`${IDLE_TIMEOUT_MS / 60000} 分間操作がなかったため`), IDLE_TIMEOUT_MS);
+    idleTimer = setTimeout(() => shutdown(`${idleLimitMinutes} 分間操作がなかったため`), idleLimitMinutes * 60 * 1000);
 }
 
 function isAuthorized(request, port) {
@@ -600,6 +602,14 @@ async function main() {
         "このウィンドウで、Bitwarden の金庫のロック解除と、秘密値の送信や保存の承認を行います。",
         "",
     );
+    idleLimitMinutes = idleMinutes(process.argv[3]);
+    if (idleLimitMinutes !== DEFAULT_IDLE_MINUTES) {
+        say(
+            `注意: 利用者の指示により、このウィンドウは ${idleLimitMinutes} 分間操作がなければ金庫をロックします (既定は ${DEFAULT_IDLE_MINUTES} 分)。`,
+            "心当たりがない場合は、マスターパスワードを入力せずにこのウィンドウを閉じてください。",
+            "",
+        );
+    }
     if (!(await claimStateFile())) {
         say("別の bitwarden-vault のウィンドウが既に起動しているため、終了します。既に開いているウィンドウを使ってください。");
         await closeAfterEnter();
@@ -620,7 +630,7 @@ async function main() {
     say(
         "",
         "金庫のロックを解除しました。リクエストを待っています。",
-        `${IDLE_TIMEOUT_MS / 60000} 分間操作がない場合は、金庫がロックされ、このウィンドウが閉じます。このウィンドウを閉じた場合も、金庫がロックされます。`,
+        `${idleLimitMinutes} 分間操作がない場合は、金庫がロックされ、このウィンドウが閉じます。このウィンドウを閉じた場合も、金庫がロックされます。`,
     );
 }
 

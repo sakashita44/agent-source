@@ -11,6 +11,7 @@ import {
     findFolderId,
     findItemByName,
     generateArgs,
+    idleMinutes,
     passwordOf,
     summarizeItems,
 } from "../vault-core.mjs";
@@ -141,6 +142,14 @@ test("エージェントの名前は表示できる文字列に限る", () => {
     assert.equal(clientName("クロード 1号"), "クロード 1号");
     for (const client of [undefined, "", " Codex", "Codex\nyes", "\u001b[2J", "Codex‮", "x".repeat(41)]) {
         assert.equal(clientName(client), "エージェント", JSON.stringify(client));
+    }
+});
+
+test("ロックまでの時間は 15 分から 12 時間に限る", () => {
+    assert.equal(idleMinutes(undefined), 15);
+    assert.equal(idleMinutes("720"), 720);
+    for (const value of ["14", "721", "60.5", "abc", ""]) {
+        assert.throws(() => idleMinutes(value), /--idle-minutes/, value);
     }
 });
 
