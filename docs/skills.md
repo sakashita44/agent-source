@@ -56,6 +56,7 @@
 | --- | --- | --- |
 | `deep-research` | 複数の情報源にあたる調査や比較を、計画の承認を経て行い、出典付きのレポートにまとめる | 自動 |
 | `google-web-analytics` | Web サイトやブログの Google Analytics 4 と Search Console のデータを、ユーザーの認証情報で API から取得する | 自動 |
+| `bitwarden-vault` | Bitwarden の金庫の秘密値を、値を見ずに一覧、GitHub Actions の secret への登録、ssh 越しの sudo の認証、生成と保存に用いる。送信と保存は利用者がウィンドウで承認する | 自動 |
 | `commit` | 変更の単位を確定し、Conventional Commits の形式でコミットする | 自動 |
 | `pr-merge` | CI、レビュー、CHANGELOG を確認して PR をマージし、ブランチを整理する | 自動 |
 | `release` | CHANGELOG の Unreleased を版へ昇格し、タグと GitHub Release を作る | 自動 |
