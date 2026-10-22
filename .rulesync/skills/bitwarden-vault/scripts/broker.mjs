@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from "node:child_process";
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { dirname } from "node:path";
+import { StringDecoder } from "node:string_decoder";
 import {
     IDLE_TIMEOUT_MS,
     STATE_FILE,
@@ -15,6 +16,7 @@ import {
     canConnect,
     clientName,
     displaySafe,
+    displaySafeOutput,
     findFolderId,
     findItemByName,
     generateArgs,
@@ -105,23 +107,44 @@ function readLine(prompt, signal) {
         }
         process.stdout.write(prompt);
         const shownAt = Date.now();
+        let value = "";
         const finish = (answer) => {
             stdin.off("data", onData);
             signal?.removeEventListener("abort", onAbort);
+            stdin.setRawMode(false);
             stdin.pause();
+            process.stdout.write("\n");
             resolve(answer);
         };
         // コンソールの入力バッファに残った先行入力は、表示の直後に届く。直後の入力を無視し、利用者が表示を見る前の承認を防ぐ。
         const onData = (chunk) => {
-            if (Date.now() - shownAt < TYPE_AHEAD_WINDOW_MS) {
+            // 矢印キーなどの操作は、端末から ESC で始まるシーケンスとして届くため、入力に含めない。
+            if (Date.now() - shownAt < TYPE_AHEAD_WINDOW_MS || chunk.startsWith("\u001b")) {
                 return;
             }
-            finish(String(chunk).split(/\r?\n/)[0].trim());
+            for (const char of chunk) {
+                if (char === "\r" || char === "\n") {
+                    finish(value.trim());
+                    return;
+                }
+                // raw mode では Ctrl+C が SIGINT にならず \u0003 として届く。
+                if (char === "\u0003") {
+                    finish("");
+                    return;
+                }
+                if (char === "\b" || char === "\u007f") {
+                    if (value.length > 0) {
+                        value = value.slice(0, -1);
+                        process.stdout.write("\b \b");
+                    }
+                } else if (!/[\p{Cc}\p{Cf}]/u.test(char)) {
+                    value += char;
+                    process.stdout.write(char);
+                }
+            }
         };
-        const onAbort = () => {
-            process.stdout.write("\n");
-            finish(null);
-        };
+        const onAbort = () => finish(null);
+        stdin.setRawMode(true);
         stdin.setEncoding("utf8");
         stdin.on("data", onData);
         signal?.addEventListener("abort", onAbort, { once: true });
@@ -182,6 +205,11 @@ async function track(work) {
     }
 }
 
+function cancelRequest() {
+    say(CANCELLED_MESSAGE);
+    return { approved: false, cancelled: true };
+}
+
 async function confirm(question, signal, { strict = false, rememberable = false } = {}) {
     say("");
     if (strict) {
@@ -216,7 +244,14 @@ async function confirm(question, signal, { strict = false, rememberable = false 
 function runWithSecret({ file, args, appendNewline }, secret) {
     return new Promise((resolve) => {
         say("--- コマンドの出力 (ここから) ---");
-        const child = spawn(file, args, { stdio: ["pipe", "inherit", "inherit"], windowsHide: true });
+        const child = spawn(file, args, { stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+        // 子プロセスの出力に含まれる端末の制御シーケンスで画面を書き換えられないよう、受け取って無害化してから表示する。
+        // 受信の区切りで UTF-8 の複数バイトの文字が分断されるため、StringDecoder で復元する。
+        for (const stream of [child.stdout, child.stderr]) {
+            const decoder = new StringDecoder("utf8");
+            stream.on("data", (chunk) => process.stdout.write(displaySafeOutput(decoder.write(chunk))));
+            stream.on("end", () => process.stdout.write(displaySafeOutput(decoder.end())));
+        }
         let timedOut = false;
         const timer = setTimeout(() => {
             timedOut = true;
@@ -263,6 +298,9 @@ async function handleSend({ item: itemName, target, options = {}, command, reaso
     const arbitrary = target === "command";
     const plan = arbitrary ? buildArbitraryCommand(command) : buildFixedCommand(target, options);
     const { items } = await loadVault();
+    if (signal.aborted) {
+        return cancelRequest();
+    }
     const item = findItemByName(items, itemName);
     const secret = passwordOf(item);
 
@@ -290,8 +328,7 @@ async function handleSend({ item: itemName, target, options = {}, command, reaso
         }
     }
     if (signal.aborted) {
-        say(CANCELLED_MESSAGE);
-        return { approved: false, cancelled: true };
+        return cancelRequest();
     }
 
     const exitCode = await track(runWithSecret(plan, secret));
@@ -308,6 +345,9 @@ async function handleGenerate({ name, folder, length = 32, special = false, reas
     assertItemName(name);
     const args = generateArgs(length, special);
     const { items, folders } = await loadVault();
+    if (signal.aborted) {
+        return cancelRequest();
+    }
     if (items.some((item) => !item.deletedDate && item.name === name)) {
         throw new Error(`An item named ${JSON.stringify(name)} already exists.`);
     }
@@ -324,8 +364,7 @@ async function handleGenerate({ name, folder, length = 32, special = false, reas
         return { approved: false, cancelled };
     }
     if (signal.aborted) {
-        say(CANCELLED_MESSAGE);
-        return { approved: false, cancelled: true };
+        return cancelRequest();
     }
 
     await track((async () => {
@@ -444,9 +483,11 @@ function handleRequest(request, response, port) {
     task.then(
         (result) => respond(response, 200, { ok: true, ...result }),
         (error) => {
-            if (!signal.aborted) {
-                say(`リクエストを処理できませんでした。理由: ${error.message}`);
+            if (signal.aborted) {
+                respond(response, 200, { ok: true, approved: false, cancelled: true });
+                return;
             }
+            say(`リクエストを処理できませんでした。理由: ${error.message}`);
             respond(response, 400, { ok: false, error: error.message });
         },
     );
@@ -489,15 +530,7 @@ function removeOwnStateFile() {
     }
 }
 
-function shutdown(reason) {
-    if (shuttingDown) {
-        return;
-    }
-    shuttingDown = true;
-    shutdownController.abort();
-    clearTimeout(idleTimer);
-    server?.close();
-    section("終了");
+function lockAndClose(reason) {
     if (session) {
         const result = spawnSync("bw", ["lock"], { env: bwEnv(), stdio: "ignore", windowsHide: true });
         session = null;
@@ -510,7 +543,24 @@ function shutdown(reason) {
     removeOwnStateFile();
     say(workRunning ? "実行中のコマンドが終わってから、このウィンドウを閉じます。" : "このウィンドウは 3 秒後に閉じます。");
     // stop の HTTP 応答を返し終え、利用者がウィンドウの最終表示を確認できるまで待機してから終了する。
-    Promise.all([activeWork, delay(CLOSE_DELAY_MS)]).then(() => process.exit(0));
+    activeWork.then(() => delay(CLOSE_DELAY_MS)).then(() => process.exit(0));
+}
+
+function shutdown(reason, { immediate = false } = {}) {
+    if (shuttingDown) {
+        return;
+    }
+    shuttingDown = true;
+    shutdownController.abort();
+    clearTimeout(idleTimer);
+    server?.close();
+    section("終了");
+    if (immediate || !workRunning) {
+        lockAndClose(reason);
+        return;
+    }
+    say("実行中の処理が終わってから、金庫をロックして終了します。");
+    activeWork.then(() => lockAndClose(reason));
 }
 
 async function unlock() {
@@ -562,7 +612,10 @@ async function main() {
     server = createServer((request, response) => handleRequest(request, response, server.address().port));
     await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
     const { port } = server.address();
-    writeFileSync(STATE_FILE, JSON.stringify({ port, token, pid: process.pid, ready: true }), { mode: 0o600 });
+    // 付属スクリプトと他の仲介プロセスが状態ファイルを読むため、書き込み途中の内容を読まれないよう、別名で書いてから置き換える。
+    const pending = `${STATE_FILE}.${process.pid}.tmp`;
+    writeFileSync(pending, JSON.stringify({ port, token, pid: process.pid, ready: true }), { mode: 0o600 });
+    renameSync(pending, STATE_FILE);
     resetIdleTimer();
     say(
         "",
@@ -572,10 +625,10 @@ async function main() {
 }
 
 for (const signal of ["SIGINT", "SIGHUP", "SIGBREAK", "SIGTERM"]) {
-    process.on(signal, () => shutdown("終了の操作を受けたため"));
+    process.on(signal, () => shutdown("終了の操作を受けたため", { immediate: true }));
 }
 
 main().catch((error) => {
     say(`仲介プロセスを開始できませんでした。理由: ${error.message}`);
-    shutdown("エラーが発生したため");
+    shutdown("エラーが発生したため", { immediate: true });
 });

@@ -191,6 +191,11 @@ export function displaySafe(text) {
     return String(text).replace(UNSAFE_DISPLAY_CHARACTERS, (char) => `\\u{${char.codePointAt(0).toString(16)}}`);
 }
 
+// 制御文字 (Cc) には改行も含まれるため、行に分けてから無害化し、改行だけを残す。
+export function displaySafeOutput(text) {
+    return String(text).replace(/\r\n/g, "\n").split("\n").map(displaySafe).join("\n");
+}
+
 export function readState() {
     if (!existsSync(STATE_FILE)) {
         return null;

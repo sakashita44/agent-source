@@ -7,6 +7,7 @@ import {
     buildFixedCommand,
     clientName,
     displaySafe,
+    displaySafeOutput,
     findFolderId,
     findItemByName,
     generateArgs,
@@ -153,4 +154,7 @@ test("画面へ表示する文字列から端末の制御と書式制御の文�
     const shown = displaySafe("説明\u001b[2J\u001b[H偽の表示\n\u009b2J‮exe.sbat⁦");
     assert.ok(!/[\p{Cc}\p{Cf}]/u.test(shown));
     assert.equal(displaySafe("hp-z240 の sudo を更新する"), "hp-z240 の sudo を更新する");
+    const output = displaySafeOutput("1 行目\r\n\u001b[30;40m2 行目\r上書き\n");
+    assert.equal(output.split("\n").length, 3);
+    assert.ok(!/[\p{Cc}\p{Cf}]/u.test(output.replaceAll("\n", "")));
 });

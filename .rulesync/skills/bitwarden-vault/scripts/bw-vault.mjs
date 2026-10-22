@@ -49,6 +49,8 @@ function post(port, token, path, body) {
             },
         }, (response) => {
             const chunks = [];
+            // 応答の受信中の切断は ClientRequest ではなく応答側の error として届く。
+            response.on("error", (error) => reject(new Error(`Lost the connection to the bitwarden-vault broker (${error.code ?? error.message}). Ask the user to check the bitwarden-vault window.`)));
             response.on("data", (chunk) => chunks.push(chunk));
             response.on("end", () => {
                 try {
@@ -110,10 +112,12 @@ async function start(client) {
         throw new Error("bitwarden-vault supports Windows only.");
     }
     let existing = liveBrokerState();
+    let stalePid = null;
     if (existing?.ready) {
         if (await isRunning()) {
             return { started: false, message: "The broker is already running and the vault is unlocked." };
         }
+        stalePid = existing.pid;
         existing = null;
     }
     if (!existing) {
@@ -123,7 +127,8 @@ async function start(client) {
     let seen = Boolean(existing);
     while (Date.now() - launchedAt < START_WAIT_MS) {
         await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
-        const state = liveBrokerState();
+        const current = liveBrokerState();
+        const state = current?.pid === stalePid ? null : current;
         if (state) {
             seen = true;
             if (state.ready && await isRunning()) {
