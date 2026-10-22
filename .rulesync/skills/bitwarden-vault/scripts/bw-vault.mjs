@@ -5,7 +5,7 @@ import { request } from "node:http";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { clientName, isProcessAlive, readState } from "./vault-core.mjs";
+import { clientName, idleMinutes, isProcessAlive, readState } from "./vault-core.mjs";
 
 const START_WAIT_MS = 90 * 1000;
 const POLL_INTERVAL_MS = 2000;
@@ -13,7 +13,7 @@ const LAUNCH_GRACE_MS = 10 * 1000;
 
 const USAGE = [
     "Usage (every command accepts --client <name>: the name the user gave the agent, or its product name such as Claude Code):",
-    "  bw-vault.mjs start",
+    "  bw-vault.mjs start [--idle-minutes <15-720>]",
     "  bw-vault.mjs status",
     "  bw-vault.mjs list [--search <text>]",
     "  bw-vault.mjs send gh-secret --item <name> --repo <owner/name> --name <SECRET_NAME> [--env <environment>] --reason <text>",
@@ -82,14 +82,14 @@ export async function callBroker(path, body = {}) {
     return result;
 }
 
-function launchBroker(client) {
+function launchBroker(client, minutes) {
     const broker = join(dirname(fileURLToPath(import.meta.url)), "broker.mjs");
     const quote = (value) => `"${value}"`;
     // start は最初の引用符付き引数をウィンドウのタイトルとして解釈する。
     // Node.js による引数の再エスケープで cmd.exe の解釈が崩れるのを防ぐため、windowsVerbatimArguments で引用符をそのまま渡す。
     const child = spawn(
         "cmd.exe",
-        ["/d", "/c", "start", quote("bitwarden-vault"), quote(process.execPath), quote(broker), quote(clientName(client))],
+        ["/d", "/c", "start", quote("bitwarden-vault"), quote(process.execPath), quote(broker), quote(clientName(client)), quote(String(minutes))],
         { detached: true, stdio: "ignore", windowsVerbatimArguments: true },
     );
     child.unref();
@@ -107,21 +107,26 @@ async function isRunning() {
     }
 }
 
-async function start(client) {
+async function start(client, requestedMinutes) {
     if (process.platform !== "win32") {
         throw new Error("bitwarden-vault supports Windows only.");
     }
+    const minutes = idleMinutes(requestedMinutes);
     let existing = liveBrokerState();
     let stalePid = null;
     if (existing?.ready) {
         if (await isRunning()) {
-            return { started: false, message: "The broker is already running and the vault is unlocked." };
+            const { idleTimeoutMinutes } = await callBroker("/status");
+            const message = idleTimeoutMinutes === minutes
+                ? "The broker is already running and the vault is unlocked."
+                : `The broker is already running with an idle timeout of ${idleTimeoutMinutes} minutes. To change it, run stop and then start again.`;
+            return { started: false, idleTimeoutMinutes, message };
         }
         stalePid = existing.pid;
         existing = null;
     }
     if (!existing) {
-        launchBroker(client);
+        launchBroker(client, minutes);
     }
     const launchedAt = Date.now();
     let seen = Boolean(existing);
@@ -160,6 +165,7 @@ function parse(argv) {
                 special: { type: "boolean" },
                 reason: { type: "string" },
                 client: { type: "string" },
+                "idle-minutes": { type: "string" },
             },
         });
     } catch (error) {
@@ -177,7 +183,7 @@ export async function run(argv) {
 
     switch (action) {
         case "start":
-            return start(client);
+            return start(client, values["idle-minutes"]);
         case "status": {
             const state = liveBrokerState();
             if (state && !state.ready) {

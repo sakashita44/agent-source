@@ -4,7 +4,8 @@ import { homedir } from "node:os";
 import { join, win32 } from "node:path";
 
 export const STATE_FILE = join(homedir(), ".local", "agent-source", "state", "bitwarden-vault", "broker.json");
-export const IDLE_TIMEOUT_MS = 15 * 60 * 1000;
+export const DEFAULT_IDLE_MINUTES = 15;
+const MAX_IDLE_MINUTES = 12 * 60;
 
 // Bitwarden の項目種別（CipherType）を表す数値。
 const ITEM_TYPES = { 1: "login", 2: "note", 3: "card", 4: "identity", 5: "sshKey" };
@@ -174,6 +175,17 @@ export function findFolderId(folders, name) {
         throw new Error(`No folder is named ${JSON.stringify(name)}.`);
     }
     return match.id;
+}
+
+export function idleMinutes(value) {
+    if (value === undefined) {
+        return DEFAULT_IDLE_MINUTES;
+    }
+    const minutes = Number(value);
+    if (!Number.isInteger(minutes) || minutes < DEFAULT_IDLE_MINUTES || minutes > MAX_IDLE_MINUTES) {
+        throw new Error(`--idle-minutes must be an integer from ${DEFAULT_IDLE_MINUTES} to ${MAX_IDLE_MINUTES}.`);
+    }
+    return minutes;
 }
 
 export function clientName(client) {
