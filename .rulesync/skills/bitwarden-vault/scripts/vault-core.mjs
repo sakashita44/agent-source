@@ -139,15 +139,19 @@ export function describeUris(uris) {
     return uris.length === 0 ? ["(なし)"] : uris.map(({ uri, match }) => `${uri} (判定: ${typeof match === "string" ? match : matchName(match)})`);
 }
 
-export function applyEdit(item, { name, notes, appendNotes, uris }) {
+// folderId は undefined で変更なし、null でフォルダなしを表す。
+export function applyEdit(item, { name, notes, appendNotes, uris, username, folderId }) {
     if (notes !== undefined && appendNotes !== undefined) {
         throw new Error("Give either --notes or --append-notes, not both.");
     }
-    if (name === undefined && notes === undefined && appendNotes === undefined && uris === undefined) {
-        throw new Error("Give at least one of --rename, --notes, --append-notes, or --uris.");
+    if ([name, notes, appendNotes, uris, username, folderId].every((change) => change === undefined)) {
+        throw new Error("Give at least one of --rename, --notes, --append-notes, --uris, --username, --folder, or --no-folder.");
     }
     if (uris !== undefined && item.type !== 1) {
         throw new Error(`Item ${JSON.stringify(item.name)} is not a login item, so it has no URIs.`);
+    }
+    if (username !== undefined && item.type !== 1) {
+        throw new Error(`Item ${JSON.stringify(item.name)} is not a login item, so it has no username.`);
     }
     const edited = structuredClone(item);
     if (name !== undefined) {
@@ -168,7 +172,21 @@ export function applyEdit(item, { name, notes, appendNotes, uris }) {
     if (uris !== undefined) {
         edited.login.uris = uris.map(({ uri, match }) => ({ match: URI_MATCHES[match], uri }));
     }
+    if (username !== undefined) {
+        edited.login.username = usernameValue(username);
+    }
+    if (folderId !== undefined) {
+        edited.folderId = folderId;
+    }
     return edited;
+}
+
+export function usernameValue(username) {
+    if (username === undefined) {
+        return null;
+    }
+    const trimmed = String(username).trim();
+    return nonEmpty(trimmed) ? trimmed : null;
 }
 
 // 照合を省略した場合も bw は exposed: false を出力するため、照合した場合に限って漏えいの項目を返し、未照合を「該当なし」と誤読させない。
@@ -287,17 +305,17 @@ export function generateArgs(length, special) {
     return ["generate", special ? "-ulns" : "-uln", "--length", String(parsed)];
 }
 
-export function buildLoginItem({ name, folderId, password }) {
+export function buildLoginItem({ name, folderId, username, uris = [], notes, password }) {
     return {
         organizationId: null,
         collectionIds: null,
         folderId: folderId ?? null,
         type: 1,
         name,
-        notes: null,
+        notes: nonEmpty(notes) ? notes : null,
         favorite: false,
         fields: [],
-        login: { uris: [], username: null, password, totp: null },
+        login: { uris: uris.map(({ uri, match }) => ({ match: URI_MATCHES[match], uri })), username: usernameValue(username), password, totp: null },
         secureNote: null,
         card: null,
         identity: null,
@@ -305,15 +323,93 @@ export function buildLoginItem({ name, folderId, password }) {
     };
 }
 
+// bw list folders は、フォルダなしを表す「No Folder」を、空でない ID を持たない項目として含めて返す。
+function namedFolders(folders) {
+    return folders.filter((folder) => typeof folder.id === "string" && folder.id.length > 0);
+}
+
 export function findFolderId(folders, name) {
     if (name === undefined) {
         return null;
     }
-    const match = folders.find((folder) => folder.id !== null && folder.name === name);
-    if (!match) {
-        throw new Error(`No folder is named ${JSON.stringify(name)}.`);
+    const named = namedFolders(folders);
+    const matches = named.filter((folder) => folder.name === name);
+    if (matches.length === 0) {
+        throw new Error(`No folder is named ${JSON.stringify(name)}. Folders: ${named.map((folder) => JSON.stringify(folder.name)).join(", ") || "(none)"}.`);
     }
-    return match.id;
+    // Bitwarden は同名のフォルダを許容する。承認画面では名前でしか区別できないため、どちらかを推測で選ばない。
+    if (matches.length > 1) {
+        throw new Error(`${matches.length} folders are named ${JSON.stringify(name)}. Rename them in Bitwarden so that the name is unique.`);
+    }
+    return matches[0].id;
+}
+
+// 存在しないフォルダは作成せずに拒否する。項目の変更の承認でフォルダまで作成すると、入力の誤りで不要なフォルダが増えるため、作成は folder-create で別に承認を得る。
+export function folderChange(folders, { folder, noFolder = false }) {
+    if (folder !== undefined && noFolder) {
+        throw new Error("Give either --folder or --no-folder, not both.");
+    }
+    if (noFolder) {
+        return null;
+    }
+    return folder === undefined ? undefined : findFolderId(folders, folder);
+}
+
+export function folderLabel(folders, folderId) {
+    if (folderId === null || folderId === undefined) {
+        return "(なし)";
+    }
+    return folders.find((folder) => folder.id === folderId)?.name ?? `(不明なフォルダ ${folderId})`;
+}
+
+// 削除されたフォルダの ID が残る項目は、summarizeItems と同じくフォルダなしとして数える。
+export function summarizeFolders(items, folders) {
+    const named = namedFolders(folders);
+    const known = new Set(named.map((folder) => folder.id));
+    const live = items.filter((item) => !item.deletedDate);
+    const count = (folderId) => live.filter((item) => (known.has(item.folderId) ? item.folderId : null) === folderId).length;
+    return {
+        folders: named
+            .map((folder) => ({ name: folder.name, items: count(folder.id) }))
+            .sort((a, b) => a.name.localeCompare(b.name)),
+        unfiledItems: count(null),
+    };
+}
+
+export function partitionMove(items, folderId) {
+    const inPlace = (item) => (item.folderId ?? null) === folderId;
+    return { targets: items.filter((item) => !inPlace(item)), unchanged: items.filter(inPlace).map((item) => item.name) };
+}
+
+// 同期後の一覧から消えた項目も、別の場所で変更された項目として扱う。
+export function changedItems(items, latest) {
+    const current = new Map(latest.map((item) => [item.id, item]));
+    return items.filter((item) => current.get(item.id)?.revisionDate !== item.revisionDate).map((item) => item.name);
+}
+
+export function assertNewFolderName(folders, name) {
+    const trimmed = typeof name === "string" ? name.trim() : "";
+    if (!nonEmpty(trimmed)) {
+        throw new Error("Give --name for the new folder.");
+    }
+    if (/[\p{Cc}\p{Cf}]/u.test(trimmed)) {
+        throw new Error("The folder name must not contain control or format characters.");
+    }
+    if (namedFolders(folders).some((folder) => folder.name === trimmed)) {
+        throw new Error(`A folder named ${JSON.stringify(trimmed)} already exists.`);
+    }
+    return trimmed;
+}
+
+export function uniqueNames(names) {
+    if (!Array.isArray(names) || names.length === 0) {
+        throw new Error("Give at least one --item.");
+    }
+    const duplicates = names.filter((name, index) => names.indexOf(name) !== index);
+    if (duplicates.length > 0) {
+        throw new Error(`--item is given more than once: ${[...new Set(duplicates)].map((name) => JSON.stringify(name)).join(", ")}.`);
+    }
+    return names;
 }
 
 export function idleMinutes(value) {

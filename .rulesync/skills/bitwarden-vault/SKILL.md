@@ -4,7 +4,9 @@ description: >-
   Use when a task needs a secret stored in the user's Bitwarden vault without
   seeing it, or needs to take stock of or tidy up the vault, such as listing
   items with their URIs and usernames to reconcile them with a credential
-  ledger, reading notes, renaming items or updating their notes and URIs,
+  ledger, reading notes, renaming items, updating their notes, URIs, and
+  usernames, listing and creating folders, moving one or more items
+  between folders,
   reading the public key and fingerprint of an SSH key item to compare it with
   a local key, checking password strength and reuse, registering a secret as a GitHub
   Actions secret, refreshing sudo authentication on a remote host over ssh,
@@ -42,7 +44,7 @@ Windows の Codex では、仲介プロセスの起動と付属スクリプト�
 
 ## 操作
 
-`send`、`generate`、`edit` と、内容のある項目を対象とする `notes` は、仲介プロセスのウィンドウで利用者が承認した場合に限り実行される。`--reason` には、利用者が承認の可否を判断できるよう、目的と影響を日本語で具体的に指定すること。応答の `approved` が `false` の場合は、利用者が要求を拒否したことを示す。理由を利用者に確認し、同じ要求を繰り返さないこと。ただし `cancelled` が `true` の場合は、利用者の拒否ではなく、仲介プロセスの終了による取り消しである。`start` で仲介プロセスを起動し直してから、同じ要求をやり直してよい。
+`send`、`generate`、`edit`、`move`、`folder-create` と、内容のある項目を対象とする `notes` は、仲介プロセスのウィンドウで利用者が承認した場合に限り実行される。`--reason` には、利用者が承認の可否を判断できるよう、目的と影響を日本語で具体的に指定すること。応答の `approved` が `false` の場合は、利用者が要求を拒否したことを示す。理由を利用者に確認し、同じ要求を繰り返さないこと。ただし `cancelled` が `true` の場合は、利用者の拒否ではなく、仲介プロセスの終了による取り消しである。`start` で仲介プロセスを起動し直してから、同じ要求をやり直してよい。
 
 承認を求める操作は、利用者が承認するまで応答を返さない。コマンドの実行に時間制限があるエージェントでは、制限を 10 分程度に設定すること。応答を待たずに付属スクリプトが中断された場合、そのリクエストは取り消され、利用者が後から承認しても実行されない。
 
@@ -61,22 +63,43 @@ node <Skill のディレクトリ>/scripts/bw-vault.mjs list [--search <文字�
 - `flags`: メモと TOTP の有無、お気に入り、マスターパスワードの再要求の設定
 - `sshKey`: SSH キーの項目の公開鍵とフィンガープリント（`SHA256:` で始まる形式）。秘密鍵は含まれない。SSH キー以外の項目では `null` となる。手元の鍵と照合する場合は、`ssh-keygen -lf <公開鍵のファイル>` が出力するフィンガープリントと比較すること
 
+フォルダの一覧を取得する。応答には、項目のない空のフォルダを含むフォルダ名とフォルダごとの項目数、フォルダのない項目の数が含まれる。`list` の応答には項目のあるフォルダしか現れないため、`--folder` に指定するフォルダ名はこの一覧で確認すること。承認なしで返される。
+
+```bash
+node <Skill のディレクトリ>/scripts/bw-vault.mjs folders
+```
+
+新しいフォルダを作成する。同名のフォルダがすでに存在する場合は拒否される。Bitwarden では、`親/子` の形式の名前のフォルダは入れ子のフォルダとして表示される。
+
+```bash
+node <Skill のディレクトリ>/scripts/bw-vault.mjs folder-create --name <フォルダ名> --reason <説明>
+```
+
 メモの本文と、テキストのカスタムフィールドの値を読み取る。対象は `--item` の繰り返し、`--search`、`--all` のいずれかで指定する。メモとテキストのフィールドが空の項目は承認なしで返される。空でない項目がある場合は、仲介プロセスのウィンドウに内容が一覧で表示され、利用者が 1 回の承認でまとめて許可する。隠しフィールドの値は返されない。メモにはリカバリーコードなどの秘密値が書かれていることがあるため、対象は作業に必要な項目に絞ること。
 
 ```bash
 node <Skill のディレクトリ>/scripts/bw-vault.mjs notes (--item <項目名> [--item <項目名>...] | --search <文字列> | --all) --reason <説明>
 ```
 
-項目の名前、メモ、URI を変更する。パスワード、ユーザー名、TOTP、カスタムフィールドは変更できない。変更前と変更後の内容が仲介プロセスのウィンドウに表示され、利用者が承認した場合に限り保存される。承認を待つ間に別の場所で同じ項目が変更された場合は、保存されずにエラーとなる。
+項目の名前、メモ、URI、ユーザー名と、項目を格納するフォルダを変更する。パスワード、TOTP、カスタムフィールドは変更できない。変更前と変更後の内容が仲介プロセスのウィンドウに表示され、利用者が承認した場合に限り保存される。承認を待つ間に別の場所で同じ項目が変更された場合は、保存されずにエラーとなる。
 
 ```bash
-node <Skill のディレクトリ>/scripts/bw-vault.mjs edit --item <項目名> [--rename <新しい項目名>] [--notes <メモ> | --append-notes <追記する文>] [--uris <JSON>] --reason <説明>
+node <Skill のディレクトリ>/scripts/bw-vault.mjs edit --item <項目名> [--rename <新しい項目名>] [--notes <メモ> | --append-notes <追記する文>] [--uris <JSON>] [--username <ユーザー名>] [--folder <フォルダ名> | --no-folder] --reason <説明>
 ```
 
 - `--rename`: 新しい項目名は `{対象サービス}-{種別}-{ラベル}` の命名規則に従うこと（規則は `generate` の説明を参照のこと）。同名の項目がすでに存在する場合は拒否される
 - `--notes`: メモ全体を置き換える。空文字列を指定するとメモを削除する。既存のメモを置き換える場合は、先に `notes` で内容を確認すること
 - `--append-notes`: 既存のメモの末尾に、改行を挟んで追記する
 - `--uris`: URI の一覧全体を置き換える。`[{"uri":"https://example.com","match":"host"}]` の形式の JSON 配列で指定し、`match` を省略すると `default` となる。既存の URI を残す場合は、`list --with uris` で取得した一覧に追加して指定すること
+- `--username`: ログイン項目のユーザー名を置き換える。空文字列を指定するとユーザー名を削除する
+- `--folder`: 項目を指定したフォルダへ移動する。種別を問わず移動できる。フォルダ名は完全一致で照合され、存在しないフォルダは作成されずに拒否される。フォルダが必要な場合は、先に `folder-create` で作成すること
+- `--no-folder`: 項目をフォルダなしへ戻す
+
+複数の項目を、1 回の承認でまとめて同じフォルダへ移動する。対象は `--item` の繰り返しで指定し、`--search` と `--all` は受け付けない。すでに移動先にある項目は変更されず、応答の `unchanged` に示される。保存の直前に、承認を待つ間に別の場所で変更された項目がないかが照合され、1 件でもあればどの項目も移動されずにエラーとなる。保存の途中で失敗した場合は、失敗の前に移動された項目がエラーに示される。
+
+```bash
+node <Skill のディレクトリ>/scripts/bw-vault.mjs move --item <項目名> [--item <項目名>...] (--folder <フォルダ名> | --no-folder) --reason <説明>
+```
 
 ログイン項目のパスワードの強度（0〜4）と、金庫内での使い回しの回数を取得する。応答にパスワードそのものは含まれない。`--check-exposed` を指定すると、既知の漏えいに該当するかも照合する。照合では、パスワードのハッシュの先頭 5 文字が Have I Been Pwned へ送信されるため、利用者が漏えいの照合を求めた場合に限って指定すること。
 
@@ -115,8 +138,13 @@ node <Skill のディレクトリ>/scripts/bw-vault.mjs send command --item <項
 ランダムな値を生成し、新しいログイン項目のパスワードとして保存する。利用者が手動で入力する必要のない秘密値に限って用いる。項目名は `{対象サービス}-{種別}-{ラベル}` の形式とし、種別は `Token`、`Account`、`KeyPair` のいずれかとする。対象サービスには ASCII の英数字と `.` を、ラベルには ASCII の英数字と `.`、`_`、`-` を用いる。同名の項目がすでに存在する場合は拒否される。
 
 ```bash
-node <Skill のディレクトリ>/scripts/bw-vault.mjs generate --name <項目名> [--folder <フォルダ名>] [--length <16〜128>] [--special] --reason <説明>
+node <Skill のディレクトリ>/scripts/bw-vault.mjs generate --name <項目名> [--folder <フォルダ名>] [--username <ユーザー名>] [--uris <JSON>] [--notes <メモ>] [--length <16〜128>] [--special] --reason <説明>
 ```
+
+- `--folder`: 既存のフォルダ名を指定する。フォルダ名は完全一致で照合され、存在しないフォルダは拒否される。フォルダのない項目として保存する場合は省略する
+- `--username`: 項目のユーザー名を登録する
+- `--uris`: 項目の URI を登録する。形式は `edit` の `--uris` と同じである
+- `--notes`: 項目のメモを登録する。秘密値はメモに含めないこと。メモの内容は承認画面に表示される
 
 保存した値を利用する場合は、続けて `send` で受け渡す。保存後は、項目の用途と期限を利用者が台帳に記録できるよう、項目名を利用者に報告すること。
 
@@ -135,9 +163,13 @@ node <Skill のディレクトリ>/scripts/bw-vault.mjs generate --name <項目�
 | `window closed before the vault was unlocked` | ウィンドウに表示された内容を利用者に確認し、原因を解消してから `start` を再実行する |
 | `Lost the connection to the bitwarden-vault broker` | 利用者にウィンドウの表示内容の確認を依頼する。同じリクエストを繰り返す前に、前のリクエストが実行されたかを利用者に確認する |
 | `No item is named` | `list` で項目名を確認する。項目名は完全一致で照合される |
+| `No folder is named` | エラーに示された既存のフォルダ名から選ぶ。該当するフォルダがない場合は、作成するフォルダ名を利用者と決定し、`folder-create` で作成する |
+| `folders are named` | 同名のフォルダが複数存在する。利用者に Bitwarden での改名を依頼する |
 | `items are named` | 同名の項目が複数存在する。利用者に Bitwarden での改名を依頼する |
 | `has no password` | 項目にパスワードが設定されていない。利用者に対象項目を確認する |
 | `does not follow the naming rule` | 命名規則に適合する項目名を利用者と決定する |
-| `already exists` | 同名の項目が存在する。別の項目名を利用者と決定する |
+| `already exists` | 同名の項目またはフォルダが存在する。別の名前を利用者と決定する。フォルダの場合は、既存のフォルダを使うかを利用者に確認する |
+| `were changed elsewhere` | `list` で最新の内容を確認してから、`move` を再実行する |
+| `Moved before the failure` | エラーに示された項目は移動済みである。仲介プロセスのウィンドウに表示された `bw` のエラーの確認を利用者に依頼し、残りの項目だけを対象に `move` を再実行する |
 | `was changed elsewhere` | `list` や `notes` で最新の内容を確認してから、`edit` を再実行する |
 | `bw ... failed` | 仲介プロセスのウィンドウに表示された `bw` のエラーの確認を利用者に依頼する |
