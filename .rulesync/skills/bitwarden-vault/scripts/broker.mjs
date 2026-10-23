@@ -10,10 +10,12 @@ import {
     STATE_FILE,
     applyEdit,
     assertItemName,
+    assertNewFolderName,
     assertReason,
     buildArbitraryCommand,
     buildFixedCommand,
     buildLoginItem,
+    changedItems,
     canConnect,
     clientName,
     describeUris,
@@ -30,10 +32,13 @@ import {
     needsNoteApproval,
     noteContents,
     parseUris,
+    partitionMove,
     passwordOf,
     readState,
     summarizeHealth,
+    summarizeFolders,
     summarizeItems,
+    uniqueNames,
     usernameValue,
 } from "./vault-core.mjs";
 
@@ -531,10 +536,11 @@ async function handleSend({ item: itemName, target, options = {}, command, reaso
     return { approved: true, exitCode };
 }
 
-async function handleGenerate({ name, folder, username, length = 32, special = false, reason, client }, signal) {
+async function handleGenerate({ name, folder, username, uris, notes, length = 32, special = false, reason, client }, signal) {
     const explanation = assertReason(reason);
     assertItemName(name);
     const args = generateArgs(length, special);
+    const parsedUris = uris === undefined ? [] : parseUris(uris);
     const { items, folders } = await loadVault();
     if (signal.aborted) {
         return cancelRequest();
@@ -551,6 +557,12 @@ async function handleGenerate({ name, folder, username, length = 32, special = f
         ["生成する値", `${args.slice(1).join(" ")} (bw generate のオプション)`],
         [`${clientName(client)} の説明`, explanation],
     ]);
+    if (parsedUris.length > 0) {
+        sayBlock("URI", describeUris(parsedUris));
+    }
+    if (typeof notes === "string" && notes.length > 0) {
+        sayBlock("メモ", notesLines(notes));
+    }
     const { approved, cancelled } = await confirm(`新しい項目 ${name} を作成し、生成した値を保存しますか？`, signal);
     if (!approved) {
         return { approved: false, cancelled };
@@ -562,20 +574,121 @@ async function handleGenerate({ name, folder, username, length = 32, special = f
     await track((async () => {
         const password = (await checkedBw(args)).trim();
         // bw create は Base64 でエンコードされた JSON を入力として受け取る。
-        const encoded = Buffer.from(JSON.stringify(buildLoginItem({ name, folderId, username, password }))).toString("base64");
+        const encoded = Buffer.from(JSON.stringify(buildLoginItem({ name, folderId, username, uris: parsedUris, notes, password }))).toString("base64");
         await checkedBw(["create", "item"], { input: encoded });
     })());
     say(`項目 ${name} を作成し、生成した値をパスワードとして保存しました。値は ${clientName(client)} に返していません。`);
     return { approved: true, name };
 }
 
+async function handleFolders({ client }) {
+    const { items, folders } = await loadVault();
+    const summary = summarizeFolders(items, folders);
+    say(`フォルダ ${summary.folders.length} 件の名前と項目数を ${clientName(client)} に返しました。秘密値を含まないため、承認なしで実行しました。`);
+    return summary;
+}
+
+async function handleFolderCreate({ name, reason, client }, signal) {
+    const explanation = assertReason(reason);
+    assertNewFolderName([], name);
+    const { folders } = await loadVault();
+    if (signal.aborted) {
+        return cancelRequest();
+    }
+    const folderName = assertNewFolderName(folders, name);
+
+    sayDetails([["作成するフォルダ", folderName], [`${clientName(client)} の説明`, explanation]]);
+    const { approved, cancelled } = await confirm(`フォルダ ${folderName} を作成しますか？`, signal);
+    if (!approved) {
+        return { approved: false, cancelled };
+    }
+    if (signal.aborted) {
+        return cancelRequest();
+    }
+
+    await track((async () => {
+        // 承認を待つ間に別の場所で同名のフォルダが作られた場合に、同名のフォルダを重複して作らないよう、同期してから照合する。
+        await checkedBw(["sync"]);
+        assertNewFolderName(JSON.parse(await checkedBw(["list", "folders"])), folderName);
+        const encoded = Buffer.from(JSON.stringify({ name: folderName })).toString("base64");
+        await checkedBw(["create", "folder"], { input: encoded });
+    })());
+    say(`フォルダ ${folderName} を作成しました。`);
+    return { approved: true, name: folderName };
+}
+
+async function handleMove({ items: names, folder, noFolder, reason, client }, signal) {
+    const explanation = assertReason(reason);
+    uniqueNames(names);
+    if ((folder === undefined) === (noFolder !== true)) {
+        throw new Error("Give exactly one of --folder or --no-folder to choose the destination.");
+    }
+    const { items, folders } = await loadVault();
+    if (signal.aborted) {
+        return cancelRequest();
+    }
+    const selected = names.map((name) => findItemByName(items, name));
+    const folderId = folderChange(folders, { folder, noFolder: noFolder === true });
+    const destination = folderLabel(folders, folderId);
+    const { targets, unchanged } = partitionMove(selected, folderId);
+
+    sayDetails([
+        ["移動先", destination],
+        ["対象", `${targets.length} 件`],
+        [`${clientName(client)} の説明`, explanation],
+    ]);
+    say("");
+    targets.forEach((item) => say(`  ${item.name} (現在のフォルダ: ${folderLabel(folders, item.folderId)})`));
+    if (unchanged.length > 0) {
+        say("", `次の ${unchanged.length} 件はすでに移動先にあるため、変更しません。`, ...unchanged.map((name) => `  ${name}`));
+    }
+    if (targets.length === 0) {
+        return { approved: true, moved: [], unchanged };
+    }
+    const { approved, cancelled } = await confirm(`${targets.length} 件の項目をフォルダ ${destination} へ移動しますか？`, signal);
+    if (!approved) {
+        return { approved: false, cancelled };
+    }
+    if (signal.aborted) {
+        return cancelRequest();
+    }
+
+    const moved = [];
+    await track((async () => {
+        // 1 件でも別の場所で変更されていれば、どの項目も保存しない。保存の途中で失敗した場合に備え、保存済みの項目を記録する。
+        await checkedBw(["sync"]);
+        const latest = JSON.parse(await checkedBw(["list", "items"]));
+        const changed = changedItems(targets, latest);
+        const current = targets.map((item) => latest.find((other) => other.id === item.id));
+        if (changed.length > 0) {
+            say("承認を待つ間に、次の項目が別の場所で変更されたため、どの項目も移動しませんでした。", ...changed.map((name) => `  ${name}`));
+            throw new Error(`Items were changed elsewhere while waiting for approval: ${changed.map((name) => JSON.stringify(name)).join(", ")}. Nothing was moved. Run move again.`);
+        }
+        for (const [index, item] of targets.entries()) {
+            try {
+                const encoded = Buffer.from(JSON.stringify(applyEdit(current[index], { folderId }))).toString("base64");
+                await checkedBw(["edit", "item", item.id], { input: encoded });
+            } catch (error) {
+                say(`項目 ${item.name} の移動に失敗したため、残りの項目を移動しませんでした。移動済み: ${moved.length} 件`);
+                throw new Error(`${error.message} Moved before the failure: ${moved.map((name) => JSON.stringify(name)).join(", ") || "(none)"}.`);
+            }
+            moved.push(item.name);
+        }
+    })());
+    say(`${moved.length} 件の項目をフォルダ ${destination} へ移動しました。`);
+    return { approved: true, moved, unchanged };
+}
+
 const ROUTES = {
     "/status": async () => ({ unlocked: true, idleTimeoutMinutes: idleLimitMinutes }),
     "/list": handleList,
+    "/folders": handleFolders,
     "/send": handleSend,
     "/generate": handleGenerate,
     "/notes": handleNotes,
     "/edit": handleEdit,
+    "/move": handleMove,
+    "/folder-create": handleFolderCreate,
     "/report": handleReport,
     "/stop": async ({ client }) => {
         setImmediate(() => shutdown(`${clientName(client)} から終了のリクエストを受けたため`));
@@ -589,6 +702,9 @@ const ROUTE_TITLES = {
     "/generate": "秘密値の生成・保存リクエスト",
     "/notes": "メモとフィールドの値の読み取りリクエスト",
     "/edit": "項目の変更リクエスト",
+    "/folders": "フォルダ一覧の取得リクエスト",
+    "/move": "項目のフォルダの一括移動リクエスト",
+    "/folder-create": "フォルダの作成リクエスト",
     "/report": "パスワードの健全性の報告リクエスト",
 };
 

@@ -18,11 +18,14 @@ const USAGE = [
     "  bw-vault.mjs list [--search <text>] [--with uris,username,dates,fields,flags,sshKey]",
     "  bw-vault.mjs notes (--item <name> [--item <name>...] | --search <text> | --all) --reason <text>",
     "  bw-vault.mjs edit --item <name> [--rename <name>] [--notes <text> | --append-notes <text>] [--uris <json>] [--username <name>] [--folder <folder> | --no-folder] --reason <text>",
+    "  bw-vault.mjs move --item <name> [--item <name>...] (--folder <folder> | --no-folder) --reason <text>",
+    "  bw-vault.mjs folders",
+    "  bw-vault.mjs folder-create --name <folder> --reason <text>",
     "  bw-vault.mjs report [--check-exposed]",
     "  bw-vault.mjs send gh-secret --item <name> --repo <owner/name> --name <SECRET_NAME> [--env <environment>] --reason <text>",
     "  bw-vault.mjs send ssh-sudo --item <name> --host <host> [--ssh <C:\\...\\ssh.exe>] --reason <text>",
     "  bw-vault.mjs send command --item <name> --reason <text> -- <command> [args...]",
-    "  bw-vault.mjs generate --name <name> [--folder <folder>] [--username <name>] [--length <16-128>] [--special] --reason <text>",
+    "  bw-vault.mjs generate --name <name> [--folder <folder>] [--username <name>] [--uris <json>] [--notes <text>] [--length <16-128>] [--special] --reason <text>",
     "  bw-vault.mjs stop",
 ].join("\n");
 
@@ -259,6 +262,12 @@ export async function run(argv) {
                 reason: values.reason,
                 client,
             });
+        case "move":
+            return callBroker("/move", { items: values.item, folder: values.folder, noFolder: values["no-folder"], reason: values.reason, client });
+        case "folders":
+            return callBroker("/folders", { client });
+        case "folder-create":
+            return callBroker("/folder-create", { name: values.name, reason: values.reason, client });
         case "report":
             return callBroker("/report", { checkExposed: values["check-exposed"] ?? false, client });
         case "send": {
@@ -272,6 +281,8 @@ export async function run(argv) {
                 name: values.name,
                 folder: values.folder,
                 username: values.username,
+                uris: values.uris,
+                notes: values.notes,
                 length: values.length ?? 32,
                 special: values.special ?? false,
                 reason: values.reason,

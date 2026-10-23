@@ -3,10 +3,12 @@ import test from "node:test";
 import {
     applyEdit,
     assertItemName,
+    assertNewFolderName,
     assertReason,
     buildArbitraryCommand,
     buildFixedCommand,
     buildLoginItem,
+    changedItems,
     clientName,
     displaySafe,
     displaySafeOutput,
@@ -20,9 +22,12 @@ import {
     needsNoteApproval,
     noteContents,
     parseUris,
+    partitionMove,
     passwordOf,
+    summarizeFolders,
     summarizeHealth,
     summarizeItems,
+    uniqueNames,
 } from "../vault-core.mjs";
 
 const SECRET = "dummy-secret-value-0123456789";
@@ -158,10 +163,56 @@ test("フォルダの変更はフォルダなしと既存のフォルダに限�
     assert.match(folderLabel(folders, "gone"), /不明/);
 });
 
-test("生成する項目にユーザー名を登録する", () => {
-    assert.equal(buildLoginItem({ name: "A-Account-B", password: SECRET, username: " vpnuser " }).login.username, "vpnuser");
-    assert.equal(buildLoginItem({ name: "A-Account-B", password: SECRET }).login.username, null);
-    assert.equal(buildLoginItem({ name: "A-Account-B", password: SECRET, folderId: "f1" }).folderId, "f1");
+test("生成する項目にユーザー名、URI、メモを登録する", () => {
+    const item = buildLoginItem({
+        name: "A-Account-B", password: SECRET, username: " vpnuser ", folderId: "f1",
+        uris: parseUris('[{"uri":"https://vpn.example.com","match":"host"},{"uri":"https://x.example.com"}]'), notes: "用途: VPN",
+    });
+    assert.equal(item.login.username, "vpnuser");
+    assert.equal(item.folderId, "f1");
+    assert.deepEqual(item.login.uris, [{ match: 1, uri: "https://vpn.example.com" }, { match: null, uri: "https://x.example.com" }]);
+    assert.equal(item.notes, "用途: VPN");
+    assert.equal(item.login.password, SECRET);
+    const bare = buildLoginItem({ name: "A-Account-B", password: SECRET, notes: "" });
+    assert.equal(bare.login.username, null);
+    assert.deepEqual(bare.login.uris, []);
+    assert.equal(bare.notes, null);
+    assert.equal(bare.folderId, null);
+});
+
+test("フォルダ一覧は空のフォルダも含め、ゴミ箱の項目を除き、削除されたフォルダの項目をフォルダなしとして数える", () => {
+    const summary = summarizeFolders(items, [...folders, { id: "f2", name: "Empty" }]);
+    assert.deepEqual(summary, { folders: [{ name: "Dev", items: 1 }, { name: "Empty", items: 0 }], unfiledItems: 4 });
+    assert.ok(!JSON.stringify(summary).includes(SECRET));
+});
+
+test("作成するフォルダの名前は空でなく、既存のフォルダと重ならない", () => {
+    assert.equal(assertNewFolderName(folders, " 自宅サービス "), "自宅サービス");
+    assert.equal(assertNewFolderName(folders, "Servers/VPN"), "Servers/VPN");
+    assert.throws(() => assertNewFolderName(folders, "Dev"), /already exists/);
+    assert.throws(() => assertNewFolderName(folders, " "), /Give --name/);
+    assert.throws(() => assertNewFolderName(folders, undefined), /Give --name/);
+    assert.throws(() => assertNewFolderName(folders, "A‮B"), /control or format/);
+    assert.throws(() => assertNewFolderName(folders, "A\nB"), /control or format/);
+});
+
+test("一括移動の対象は重複なく 1 件以上に限る", () => {
+    assert.deepEqual(uniqueNames(["A", "B"]), ["A", "B"]);
+    assert.throws(() => uniqueNames([]), /at least one/);
+    assert.throws(() => uniqueNames(undefined), /at least one/);
+    assert.throws(() => uniqueNames(["A", "B", "A"]), /more than once: "A"/);
+});
+
+test("一括移動ではすでに移動先にある項目を変更しない", () => {
+    const selected = [{ id: "1", name: "A", folderId: "f1" }, { id: "2", name: "B", folderId: null }, { id: "3", name: "C" }];
+    assert.deepEqual(partitionMove(selected, "f1"), { targets: [selected[1], selected[2]], unchanged: ["A"] });
+    assert.deepEqual(partitionMove(selected, null), { targets: [selected[0]], unchanged: ["B", "C"] });
+});
+
+test("承認を待つ間に変更または削除された項目を見つける", () => {
+    const targets = [{ id: "1", name: "A", revisionDate: "r1" }, { id: "2", name: "B", revisionDate: "r1" }, { id: "3", name: "C", revisionDate: "r1" }];
+    assert.deepEqual(changedItems(targets, [{ id: "1", revisionDate: "r1" }, { id: "2", revisionDate: "r2" }]), ["B", "C"]);
+    assert.deepEqual(changedItems(targets, targets), []);
 });
 
 test("健全性の報告から許可したフィールドだけを残す", () => {
@@ -244,6 +295,7 @@ test("フォルダ名から ID を求める", () => {
     assert.equal(findFolderId(folders, "Dev"), "f1");
     assert.throws(() => findFolderId(folders, "No Folder"), /No folder/);
     assert.throws(() => findFolderId(folders, "Missing"), /No folder.*Folders: "Dev"\./);
+    assert.throws(() => findFolderId([...folders, { id: "f9", name: "Dev" }], "Dev"), /2 folders are named "Dev"/);
 });
 
 test("エージェントの名前は表示できる文字列に限る", () => {
