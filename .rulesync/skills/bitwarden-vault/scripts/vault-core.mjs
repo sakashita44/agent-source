@@ -323,11 +323,16 @@ export function buildLoginItem({ name, folderId, username, uris = [], notes, pas
     };
 }
 
+// bw list folders は、フォルダなしを表す「No Folder」を、空でない ID を持たない項目として含めて返す。
+function namedFolders(folders) {
+    return folders.filter((folder) => typeof folder.id === "string" && folder.id.length > 0);
+}
+
 export function findFolderId(folders, name) {
     if (name === undefined) {
         return null;
     }
-    const named = folders.filter((folder) => folder.id !== null);
+    const named = namedFolders(folders);
     const matches = named.filter((folder) => folder.name === name);
     if (matches.length === 0) {
         throw new Error(`No folder is named ${JSON.stringify(name)}. Folders: ${named.map((folder) => JSON.stringify(folder.name)).join(", ") || "(none)"}.`);
@@ -357,10 +362,9 @@ export function folderLabel(folders, folderId) {
     return folders.find((folder) => folder.id === folderId)?.name ?? `(不明なフォルダ ${folderId})`;
 }
 
-// bw list folders は、フォルダなしを表す id が null の項目を含めて返す。
 // 削除されたフォルダの ID が残る項目は、summarizeItems と同じくフォルダなしとして数える。
 export function summarizeFolders(items, folders) {
-    const named = folders.filter((folder) => folder.id !== null);
+    const named = namedFolders(folders);
     const known = new Set(named.map((folder) => folder.id));
     const live = items.filter((item) => !item.deletedDate);
     const count = (folderId) => live.filter((item) => (known.has(item.folderId) ? item.folderId : null) === folderId).length;
@@ -391,7 +395,7 @@ export function assertNewFolderName(folders, name) {
     if (/[\p{Cc}\p{Cf}]/u.test(trimmed)) {
         throw new Error("The folder name must not contain control or format characters.");
     }
-    if (folders.some((folder) => folder.id !== null && folder.name === trimmed)) {
+    if (namedFolders(folders).some((folder) => folder.name === trimmed)) {
         throw new Error(`A folder named ${JSON.stringify(trimmed)} already exists.`);
     }
     return trimmed;

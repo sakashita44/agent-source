@@ -298,6 +298,14 @@ test("フォルダ名から ID を求める", () => {
     assert.throws(() => findFolderId([...folders, { id: "f9", name: "Dev" }], "Dev"), /2 folders are named "Dev"/);
 });
 
+test("ID のない「No Folder」を実在のフォルダとして扱わない", () => {
+    const withoutId = [{ object: "folder", name: "No Folder" }, { id: "f1", name: "Dev" }];
+    assert.throws(() => findFolderId(withoutId, "No Folder"), /No folder.*Folders: "Dev"\./);
+    assert.throws(() => folderChange(withoutId, { folder: "No Folder" }), /No folder/);
+    assert.deepEqual(summarizeFolders([], withoutId).folders, [{ name: "Dev", items: 0 }]);
+    assert.equal(assertNewFolderName(withoutId, "No Folder"), "No Folder");
+});
+
 test("エージェントの名前は表示できる文字列に限る", () => {
     assert.equal(clientName("Claude Code"), "Claude Code");
     assert.equal(clientName("cc0"), "cc0");
