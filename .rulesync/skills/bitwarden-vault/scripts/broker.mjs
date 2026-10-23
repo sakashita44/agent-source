@@ -21,6 +21,8 @@ import {
     displaySafeOutput,
     findFolderId,
     findItemByName,
+    folderChange,
+    folderLabel,
     generateArgs,
     idleMinutes,
     isProcessAlive,
@@ -32,6 +34,7 @@ import {
     readState,
     summarizeHealth,
     summarizeItems,
+    usernameValue,
 } from "./vault-core.mjs";
 
 const MAX_BODY_BYTES = 64 * 1024;
@@ -398,16 +401,17 @@ function notesLines(notes) {
     return typeof notes === "string" && notes.length > 0 ? notes.replace(/\r\n/g, "\n").split("\n") : ["(なし)"];
 }
 
-async function handleEdit({ item: itemName, rename, notes, appendNotes, uris, reason, client }, signal) {
+async function handleEdit({ item: itemName, rename, notes, appendNotes, uris, username, folder, noFolder, reason, client }, signal) {
     const requester = clientName(client);
     const explanation = assertReason(reason);
     const parsedUris = uris === undefined ? undefined : parseUris(uris);
-    const { items } = await loadVault();
+    const { items, folders } = await loadVault();
     if (signal.aborted) {
         return cancelRequest();
     }
     const item = findItemByName(items, itemName);
-    const changes = { name: rename, notes, appendNotes, uris: parsedUris };
+    const folderId = folderChange(folders, { folder, noFolder: noFolder === true });
+    const changes = { name: rename, notes, appendNotes, uris: parsedUris, username, folderId };
     const preview = applyEdit(item, changes);
     if (rename !== undefined && items.some((other) => !other.deletedDate && other.id !== item.id && other.name === preview.name)) {
         throw new Error(`An item named ${JSON.stringify(preview.name)} already exists.`);
@@ -426,6 +430,14 @@ async function handleEdit({ item: itemName, rename, notes, appendNotes, uris, re
     if (parsedUris !== undefined) {
         sayBlock("URI (変更前)", describeUris(item.login?.uris ?? []));
         sayBlock("URI (変更後)", describeUris(parsedUris));
+    }
+    if (username !== undefined) {
+        sayBlock("ユーザー名 (変更前)", [item.login?.username || "(なし)"]);
+        sayBlock("ユーザー名 (変更後)", [preview.login.username ?? "(なし)"]);
+    }
+    if (folderId !== undefined) {
+        sayBlock("フォルダ (変更前)", [folderLabel(folders, item.folderId)]);
+        sayBlock("フォルダ (変更後)", [folderLabel(folders, folderId)]);
     }
     const { approved, cancelled } = await confirm(`項目 ${item.name} をこの内容で変更しますか？`, signal);
     if (!approved) {
@@ -519,7 +531,7 @@ async function handleSend({ item: itemName, target, options = {}, command, reaso
     return { approved: true, exitCode };
 }
 
-async function handleGenerate({ name, folder, length = 32, special = false, reason, client }, signal) {
+async function handleGenerate({ name, folder, username, length = 32, special = false, reason, client }, signal) {
     const explanation = assertReason(reason);
     assertItemName(name);
     const args = generateArgs(length, special);
@@ -535,6 +547,7 @@ async function handleGenerate({ name, folder, length = 32, special = false, reas
     sayDetails([
         ["項目名", name],
         ["フォルダ", folder ?? "(なし)"],
+        ["ユーザー名", usernameValue(username) ?? "(なし)"],
         ["生成する値", `${args.slice(1).join(" ")} (bw generate のオプション)`],
         [`${clientName(client)} の説明`, explanation],
     ]);
@@ -549,7 +562,7 @@ async function handleGenerate({ name, folder, length = 32, special = false, reas
     await track((async () => {
         const password = (await checkedBw(args)).trim();
         // bw create は Base64 でエンコードされた JSON を入力として受け取る。
-        const encoded = Buffer.from(JSON.stringify(buildLoginItem({ name, folderId, password }))).toString("base64");
+        const encoded = Buffer.from(JSON.stringify(buildLoginItem({ name, folderId, username, password }))).toString("base64");
         await checkedBw(["create", "item"], { input: encoded });
     })());
     say(`項目 ${name} を作成し、生成した値をパスワードとして保存しました。値は ${clientName(client)} に返していません。`);

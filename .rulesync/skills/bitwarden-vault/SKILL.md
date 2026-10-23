@@ -4,7 +4,8 @@ description: >-
   Use when a task needs a secret stored in the user's Bitwarden vault without
   seeing it, or needs to take stock of or tidy up the vault, such as listing
   items with their URIs and usernames to reconcile them with a credential
-  ledger, reading notes, renaming items or updating their notes and URIs,
+  ledger, reading notes, renaming items, updating their notes, URIs, and
+  usernames, or moving them between folders,
   reading the public key and fingerprint of an SSH key item to compare it with
   a local key, checking password strength and reuse, registering a secret as a GitHub
   Actions secret, refreshing sudo authentication on a remote host over ssh,
@@ -67,16 +68,19 @@ node <Skill のディレクトリ>/scripts/bw-vault.mjs list [--search <文字�
 node <Skill のディレクトリ>/scripts/bw-vault.mjs notes (--item <項目名> [--item <項目名>...] | --search <文字列> | --all) --reason <説明>
 ```
 
-項目の名前、メモ、URI を変更する。パスワード、ユーザー名、TOTP、カスタムフィールドは変更できない。変更前と変更後の内容が仲介プロセスのウィンドウに表示され、利用者が承認した場合に限り保存される。承認を待つ間に別の場所で同じ項目が変更された場合は、保存されずにエラーとなる。
+項目の名前、メモ、URI、ユーザー名と、項目を格納するフォルダを変更する。パスワード、TOTP、カスタムフィールドは変更できない。変更前と変更後の内容が仲介プロセスのウィンドウに表示され、利用者が承認した場合に限り保存される。承認を待つ間に別の場所で同じ項目が変更された場合は、保存されずにエラーとなる。
 
 ```bash
-node <Skill のディレクトリ>/scripts/bw-vault.mjs edit --item <項目名> [--rename <新しい項目名>] [--notes <メモ> | --append-notes <追記する文>] [--uris <JSON>] --reason <説明>
+node <Skill のディレクトリ>/scripts/bw-vault.mjs edit --item <項目名> [--rename <新しい項目名>] [--notes <メモ> | --append-notes <追記する文>] [--uris <JSON>] [--username <ユーザー名>] [--folder <フォルダ名> | --no-folder] --reason <説明>
 ```
 
 - `--rename`: 新しい項目名は `{対象サービス}-{種別}-{ラベル}` の命名規則に従うこと（規則は `generate` の説明を参照のこと）。同名の項目がすでに存在する場合は拒否される
 - `--notes`: メモ全体を置き換える。空文字列を指定するとメモを削除する。既存のメモを置き換える場合は、先に `notes` で内容を確認すること
 - `--append-notes`: 既存のメモの末尾に、改行を挟んで追記する
 - `--uris`: URI の一覧全体を置き換える。`[{"uri":"https://example.com","match":"host"}]` の形式の JSON 配列で指定し、`match` を省略すると `default` となる。既存の URI を残す場合は、`list --with uris` で取得した一覧に追加して指定すること
+- `--username`: ログイン項目のユーザー名を置き換える。空文字列を指定するとユーザー名を削除する
+- `--folder`: 項目を指定したフォルダへ移動する。種別を問わず移動できる。フォルダ名は完全一致で照合され、存在しないフォルダは作成されずに拒否される。フォルダの作成が必要な場合は、利用者に Bitwarden での作成を依頼すること
+- `--no-folder`: 項目をフォルダなしへ戻す
 
 ログイン項目のパスワードの強度（0〜4）と、金庫内での使い回しの回数を取得する。応答にパスワードそのものは含まれない。`--check-exposed` を指定すると、既知の漏えいに該当するかも照合する。照合では、パスワードのハッシュの先頭 5 文字が Have I Been Pwned へ送信されるため、利用者が漏えいの照合を求めた場合に限って指定すること。
 
@@ -115,8 +119,10 @@ node <Skill のディレクトリ>/scripts/bw-vault.mjs send command --item <項
 ランダムな値を生成し、新しいログイン項目のパスワードとして保存する。利用者が手動で入力する必要のない秘密値に限って用いる。項目名は `{対象サービス}-{種別}-{ラベル}` の形式とし、種別は `Token`、`Account`、`KeyPair` のいずれかとする。対象サービスには ASCII の英数字と `.` を、ラベルには ASCII の英数字と `.`、`_`、`-` を用いる。同名の項目がすでに存在する場合は拒否される。
 
 ```bash
-node <Skill のディレクトリ>/scripts/bw-vault.mjs generate --name <項目名> [--folder <フォルダ名>] [--length <16〜128>] [--special] --reason <説明>
+node <Skill のディレクトリ>/scripts/bw-vault.mjs generate --name <項目名> [--folder <フォルダ名>] [--username <ユーザー名>] [--length <16〜128>] [--special] --reason <説明>
 ```
+
+`--folder` には既存のフォルダ名を指定する。フォルダ名は完全一致で照合され、存在しないフォルダは拒否される。フォルダのない項目として保存する場合は省略する。`--username` を指定すると、ユーザー名を登録した項目として保存する。
 
 保存した値を利用する場合は、続けて `send` で受け渡す。保存後は、項目の用途と期限を利用者が台帳に記録できるよう、項目名を利用者に報告すること。
 
@@ -135,6 +141,7 @@ node <Skill のディレクトリ>/scripts/bw-vault.mjs generate --name <項目�
 | `window closed before the vault was unlocked` | ウィンドウに表示された内容を利用者に確認し、原因を解消してから `start` を再実行する |
 | `Lost the connection to the bitwarden-vault broker` | 利用者にウィンドウの表示内容の確認を依頼する。同じリクエストを繰り返す前に、前のリクエストが実行されたかを利用者に確認する |
 | `No item is named` | `list` で項目名を確認する。項目名は完全一致で照合される |
+| `No folder is named` | エラーに示された既存のフォルダ名から選ぶ。該当するフォルダがない場合は、利用者に Bitwarden でのフォルダの作成を依頼する |
 | `items are named` | 同名の項目が複数存在する。利用者に Bitwarden での改名を依頼する |
 | `has no password` | 項目にパスワードが設定されていない。利用者に対象項目を確認する |
 | `does not follow the naming rule` | 命名規則に適合する項目名を利用者と決定する |

@@ -139,15 +139,19 @@ export function describeUris(uris) {
     return uris.length === 0 ? ["(なし)"] : uris.map(({ uri, match }) => `${uri} (判定: ${typeof match === "string" ? match : matchName(match)})`);
 }
 
-export function applyEdit(item, { name, notes, appendNotes, uris }) {
+// folderId は undefined で変更なし、null でフォルダなしを表す。
+export function applyEdit(item, { name, notes, appendNotes, uris, username, folderId }) {
     if (notes !== undefined && appendNotes !== undefined) {
         throw new Error("Give either --notes or --append-notes, not both.");
     }
-    if (name === undefined && notes === undefined && appendNotes === undefined && uris === undefined) {
-        throw new Error("Give at least one of --rename, --notes, --append-notes, or --uris.");
+    if ([name, notes, appendNotes, uris, username, folderId].every((change) => change === undefined)) {
+        throw new Error("Give at least one of --rename, --notes, --append-notes, --uris, --username, --folder, or --no-folder.");
     }
     if (uris !== undefined && item.type !== 1) {
         throw new Error(`Item ${JSON.stringify(item.name)} is not a login item, so it has no URIs.`);
+    }
+    if (username !== undefined && item.type !== 1) {
+        throw new Error(`Item ${JSON.stringify(item.name)} is not a login item, so it has no username.`);
     }
     const edited = structuredClone(item);
     if (name !== undefined) {
@@ -168,7 +172,21 @@ export function applyEdit(item, { name, notes, appendNotes, uris }) {
     if (uris !== undefined) {
         edited.login.uris = uris.map(({ uri, match }) => ({ match: URI_MATCHES[match], uri }));
     }
+    if (username !== undefined) {
+        edited.login.username = usernameValue(username);
+    }
+    if (folderId !== undefined) {
+        edited.folderId = folderId;
+    }
     return edited;
+}
+
+export function usernameValue(username) {
+    if (username === undefined) {
+        return null;
+    }
+    const trimmed = String(username).trim();
+    return nonEmpty(trimmed) ? trimmed : null;
 }
 
 // 照合を省略した場合も bw は exposed: false を出力するため、照合した場合に限って漏えいの項目を返し、未照合を「該当なし」と誤読させない。
@@ -287,7 +305,7 @@ export function generateArgs(length, special) {
     return ["generate", special ? "-ulns" : "-uln", "--length", String(parsed)];
 }
 
-export function buildLoginItem({ name, folderId, password }) {
+export function buildLoginItem({ name, folderId, username, password }) {
     return {
         organizationId: null,
         collectionIds: null,
@@ -297,7 +315,7 @@ export function buildLoginItem({ name, folderId, password }) {
         notes: null,
         favorite: false,
         fields: [],
-        login: { uris: [], username: null, password, totp: null },
+        login: { uris: [], username: usernameValue(username), password, totp: null },
         secureNote: null,
         card: null,
         identity: null,
@@ -309,11 +327,31 @@ export function findFolderId(folders, name) {
     if (name === undefined) {
         return null;
     }
-    const match = folders.find((folder) => folder.id !== null && folder.name === name);
+    const named = folders.filter((folder) => folder.id !== null);
+    const match = named.find((folder) => folder.name === name);
     if (!match) {
-        throw new Error(`No folder is named ${JSON.stringify(name)}.`);
+        // list は項目のあるフォルダしか返さないため、空のフォルダも含めた名前をエラーで示す。
+        throw new Error(`No folder is named ${JSON.stringify(name)}. Folders: ${named.map((folder) => JSON.stringify(folder.name)).join(", ") || "(none)"}.`);
     }
     return match.id;
+}
+
+// 存在しないフォルダは作成せずに拒否する。フォルダの作成は項目の変更の承認を超えて金庫の構造を変え、入力の誤りで不要なフォルダが増えるため。
+export function folderChange(folders, { folder, noFolder = false }) {
+    if (folder !== undefined && noFolder) {
+        throw new Error("Give either --folder or --no-folder, not both.");
+    }
+    if (noFolder) {
+        return null;
+    }
+    return folder === undefined ? undefined : findFolderId(folders, folder);
+}
+
+export function folderLabel(folders, folderId) {
+    if (folderId === null || folderId === undefined) {
+        return "(なし)";
+    }
+    return folders.find((folder) => folder.id === folderId)?.name ?? `(不明なフォルダ ${folderId})`;
 }
 
 export function idleMinutes(value) {

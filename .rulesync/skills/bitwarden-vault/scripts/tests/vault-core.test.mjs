@@ -6,11 +6,14 @@ import {
     assertReason,
     buildArbitraryCommand,
     buildFixedCommand,
+    buildLoginItem,
     clientName,
     displaySafe,
     displaySafeOutput,
     findFolderId,
     findItemByName,
+    folderChange,
+    folderLabel,
     generateArgs,
     idleMinutes,
     listDetails,
@@ -124,6 +127,43 @@ test("項目の変更は名前、メモ、URI 以外を保つ", () => {
     assert.throws(() => parseUris('[{"uri":"https://x","match":"fuzzy"}]'), /Unknown match/);
 });
 
+test("項目の変更でユーザー名とフォルダを変え、秘密値を保つ", () => {
+    const item = {
+        id: "9", type: 1, name: "Host-Account-X", folderId: "f1", fields: [{ name: "API", value: SECRET, type: 1 }],
+        passwordHistory: [{ password: SECRET }],
+        login: { username: "old", password: SECRET, totp: SECRET, fido2Credentials: [{ id: "k" }], uris: [] },
+    };
+    const edited = applyEdit(item, { username: " vpnuser ", folderId: null });
+    assert.equal(edited.login.username, "vpnuser");
+    assert.equal(edited.folderId, null);
+    const strip = ({ folderId, login: { username, ...login }, ...rest }) => ({ ...rest, login });
+    assert.deepEqual(strip(edited), strip(item));
+    assert.equal(item.login.username, "old");
+    assert.equal(applyEdit(item, { username: "" }).login.username, null);
+    assert.equal(applyEdit(item, { folderId: "f2" }).folderId, "f2");
+    assert.equal(applyEdit(item, { name: "Host-Account-Y" }).folderId, "f1");
+    const sshKey = { id: "10", type: 5, name: "Home-KeyPair-X", folderId: null, sshKey: { privateKey: SECRET } };
+    assert.equal(applyEdit(sshKey, { folderId: "f1" }).folderId, "f1");
+    assert.throws(() => applyEdit(sshKey, { username: "x" }), /not a login/);
+});
+
+test("フォルダの変更はフォルダなしと既存のフォルダに限る", () => {
+    assert.equal(folderChange(folders, {}), undefined);
+    assert.equal(folderChange(folders, { noFolder: true }), null);
+    assert.equal(folderChange(folders, { folder: "Dev" }), "f1");
+    assert.throws(() => folderChange(folders, { folder: "Missing" }), /No folder/);
+    assert.throws(() => folderChange(folders, { folder: "Dev", noFolder: true }), /either/);
+    assert.equal(folderLabel(folders, "f1"), "Dev");
+    assert.equal(folderLabel(folders, null), "(なし)");
+    assert.match(folderLabel(folders, "gone"), /不明/);
+});
+
+test("生成する項目にユーザー名を登録する", () => {
+    assert.equal(buildLoginItem({ name: "A-Account-B", password: SECRET, username: " vpnuser " }).login.username, "vpnuser");
+    assert.equal(buildLoginItem({ name: "A-Account-B", password: SECRET }).login.username, null);
+    assert.equal(buildLoginItem({ name: "A-Account-B", password: SECRET, folderId: "f1" }).folderId, "f1");
+});
+
 test("健全性の報告から許可したフィールドだけを残す", () => {
     const report = [{ object: "password-health", id: "1", name: "A", passwordStrength: 1, reuseCount: 2, exposed: false, password: SECRET }];
     assert.deepEqual(summarizeHealth(report)[0], { name: "A", passwordStrength: 1, reuseCount: 2 });
@@ -203,7 +243,7 @@ test("フォルダ名から ID を求める", () => {
     assert.equal(findFolderId(folders, undefined), null);
     assert.equal(findFolderId(folders, "Dev"), "f1");
     assert.throws(() => findFolderId(folders, "No Folder"), /No folder/);
-    assert.throws(() => findFolderId(folders, "Missing"), /No folder/);
+    assert.throws(() => findFolderId(folders, "Missing"), /No folder.*Folders: "Dev"\./);
 });
 
 test("エージェントの名前は表示できる文字列に限る", () => {
