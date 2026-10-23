@@ -83,6 +83,19 @@ test("一覧の追加情報は指定したものだけを返し、値を含め�
     assert.throws(() => listDetails("uris,password"), /Unknown --with/);
 });
 
+test("SSH キーの追加情報は公開鍵とフィンガープリントだけを返し、秘密鍵を含めない", () => {
+    const sshItem = {
+        id: "8", name: "SSH-KeyPair-HomePC", type: 5,
+        sshKey: { privateKey: SECRET, publicKey: "ssh-ed25519 AAAAC3Nza dummy", keyFingerprint: "SHA256:dummyFingerprint" },
+    };
+    const summaries = summarizeItems([sshItem, items[0]], folders, listDetails("sshKey"));
+    assert.ok(!JSON.stringify(summaries).includes(SECRET));
+    const ssh = summaries.find((item) => item.name === sshItem.name);
+    const login = summaries.find((item) => item.name === items[0].name);
+    assert.deepEqual(ssh.sshKey, { publicKey: "ssh-ed25519 AAAAC3Nza dummy", keyFingerprint: "SHA256:dummyFingerprint" });
+    assert.equal(login.sshKey, null);
+});
+
 test("メモとテキストのフィールドが空の項目だけを承認なしで返せる", () => {
     const empty = noteContents({ name: "A", notes: null, fields: [{ name: "Remember", value: "true", type: 2 }, { name: "API", value: SECRET, type: 1 }] });
     assert.equal(needsNoteApproval(empty), false);

@@ -5,7 +5,8 @@ description: >-
   seeing it, or needs to take stock of or tidy up the vault, such as listing
   items with their URIs and usernames to reconcile them with a credential
   ledger, reading notes, renaming items or updating their notes and URIs,
-  checking password strength and reuse, registering a secret as a GitHub
+  reading the public key and fingerprint of an SSH key item to compare it with
+  a local key, checking password strength and reuse, registering a secret as a GitHub
   Actions secret, refreshing sudo authentication on a remote host over ssh,
   or generating and saving a new random secret. A broker process in a window on the user's Windows desktop
   holds the unlocked vault and asks the user to approve each transfer.
@@ -58,6 +59,7 @@ node <Skill のディレクトリ>/scripts/bw-vault.mjs list [--search <文字�
 - `dates`: 作成日時、更新日時、パスワードの最終変更日時
 - `fields`: カスタムフィールドの名前と種別。値は含まれない
 - `flags`: メモと TOTP の有無、お気に入り、マスターパスワードの再要求の設定
+- `sshKey`: SSH キーの項目の公開鍵とフィンガープリント（`SHA256:` で始まる形式）。秘密鍵は含まれない。SSH キー以外の項目では `null` となる。手元の鍵と照合する場合は、`ssh-keygen -lf <公開鍵のファイル>` が出力するフィンガープリントと比較すること
 
 メモの本文と、テキストのカスタムフィールドの値を読み取る。対象は `--item` の繰り返し、`--search`、`--all` のいずれかで指定する。メモとテキストのフィールドが空の項目は承認なしで返される。空でない項目がある場合は、仲介プロセスのウィンドウに内容が一覧で表示され、利用者が 1 回の承認でまとめて許可する。隠しフィールドの値は返されない。メモにはリカバリーコードなどの秘密値が書かれていることがあるため、対象は作業に必要な項目に絞ること。
 

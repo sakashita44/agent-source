@@ -296,6 +296,7 @@ const DETAIL_LABELS = {
     dates: "作成・更新日時",
     fields: "カスタムフィールドの名前と種別",
     flags: "メモと TOTP の有無などの設定",
+    sshKey: "SSH キーの公開鍵とフィンガープリント",
 };
 
 function matchesSearch(name, search) {

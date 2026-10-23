@@ -15,7 +15,7 @@ const USAGE = [
     "Usage (every command accepts --client <name>: the name the user gave the agent, or its product name such as Claude Code):",
     "  bw-vault.mjs start [--idle-minutes <15-720>]",
     "  bw-vault.mjs status",
-    "  bw-vault.mjs list [--search <text>] [--with uris,username,dates,fields,flags]",
+    "  bw-vault.mjs list [--search <text>] [--with uris,username,dates,fields,flags,sshKey]",
     "  bw-vault.mjs notes (--item <name> [--item <name>...] | --search <text> | --all) --reason <text>",
     "  bw-vault.mjs edit --item <name> [--rename <name>] [--notes <text> | --append-notes <text>] [--uris <json>] --reason <text>",
     "  bw-vault.mjs report [--check-exposed]",

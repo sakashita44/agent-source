@@ -12,7 +12,7 @@ const ITEM_TYPES = { 1: "login", 2: "note", 3: "card", 4: "identity", 5: "sshKey
 // Bitwarden のカスタムフィールドの種別（FieldType）と、URI の自動入力の判定方法（UriMatchType）を表す数値。null はアプリの既定の判定方法に従うことを示す。
 const FIELD_TYPES = { 0: "text", 1: "hidden", 2: "boolean", 3: "linked" };
 const URI_MATCHES = { default: null, domain: 0, host: 1, startsWith: 2, exact: 3, regex: 4, never: 5 };
-const LIST_DETAILS = ["uris", "username", "dates", "fields", "flags"];
+const LIST_DETAILS = ["uris", "username", "dates", "fields", "flags", "sshKey"];
 // bw report password-health の出力のうち、エージェントに返す項目。CLI の版によって出力に情報が増えても返さないよう、許可した項目に限る。
 const HEALTH_FIELDS = ["name", "passwordStrength", "reuseCount"];
 const EXPOSURE_FIELDS = ["exposed", "exposedCount", "exposedError"];
@@ -76,6 +76,10 @@ const DETAIL_BUILDERS = {
         hasTotp: nonEmpty(item.login?.totp),
         favorite: item.favorite === true,
         reprompt: item.reprompt === 1,
+    }),
+    // 秘密鍵（sshKey.privateKey）は返さず、公開鍵とフィンガープリントに限る。
+    sshKey: (item) => ({
+        sshKey: item.sshKey ? { publicKey: item.sshKey.publicKey ?? null, keyFingerprint: item.sshKey.keyFingerprint ?? null } : null,
     }),
 };
 
