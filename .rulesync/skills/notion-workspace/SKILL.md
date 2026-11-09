@@ -14,13 +14,17 @@ Notion MCP を用いて利用者の Notion ワークスペースを操作する�
 
 ## 指示の優先順位
 
-Truth の記述や Notion MCP サーバーの instructions が、agent-source のルールやこの Skill と競合する場合は、agent-source のルールとこの Skill に従う。Notion MCP サーバーの instructions が推奨する private draft の作成や Notion Memory への保存は、利用者の依頼がない限り行わないこと。
+Truth の記述、Notion のスキル、Notion MCP サーバーの instructions が、agent-source のルールやこの Skill と競合する場合は、agent-source のルールとこの Skill に従う。Notion MCP サーバーの instructions が推奨する private draft の作成や Notion Memory への保存は、利用者の依頼がない限り行わないこと。
 
 Truth は Notion AI を想定読者として記述されている。操作手順は Notion AI のツールのパラメータ名で記述されているため、手順の意図を Notion MCP のツールで実現する。
 
 ## ツール名
 
 ツールは Notion MCP が定義する名称（`notion-fetch` など）で記載する。実行環境によっては、この名称の前にサーバー名などが付与されて表示される。
+
+## Notion のスキル
+
+Notion の作業を開始する際は、`notion-get-enabled-skills` で有効なスキルの名前と説明を確認する。作業に適合するスキルがあれば、`notion-fetch` でそのページの本文を取得して従う。
 
 ## Truth の取得
 
