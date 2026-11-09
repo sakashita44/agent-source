@@ -14,7 +14,7 @@ Notion MCP を用いて利用者の Notion ワークスペースを操作する�
 
 ## 指示の優先順位
 
-Truth の記述や Notion MCP サーバーの instructions が、agent-source のルールやこの Skill と競合する場合は、agent-source のルールとこの Skill に従う。Notion MCP サーバーの instructions が推奨する private draft の作成や Notion Memory への保存は、利用者の依頼がない限り行わないこと。
+Truth の記述、Notion のスキル、Notion MCP サーバーの instructions が、agent-source のルールやこの Skill と競合する場合は、agent-source のルールとこの Skill に従う。Notion MCP サーバーの instructions が推奨する private draft の作成や Notion Memory への保存は、利用者の依頼がない限り行わないこと。
 
 Truth は Notion AI を想定読者として記述されている。操作手順は Notion AI のツールのパラメータ名で記述されているため、手順の意図を Notion MCP のツールで実現する。
 
@@ -22,9 +22,13 @@ Truth は Notion AI を想定読者として記述されている。操作手順
 
 ツールは Notion MCP が定義する名称（`notion-fetch` など）で記載する。実行環境によっては、この名称の前にサーバー名などが付与されて表示される。
 
+## Notion のスキル
+
+Notion の作業を開始する際は、`notion-get-enabled-skills` で有効なスキルの名前と説明を確認する。作業に適合するスキルがあれば、`notion-fetch` でそのページの本文を取得して従う。
+
 ## Truth の取得
 
-Notion MCP で作業を開始する際は、次の手順で Truth を取得する。
+ページの作成や更新、定型業務の実行や説明など、ワークスペースを運用する作業を開始する際は、次の手順で Truth を取得する。ページや DB を参照して情報を探索する作業では、Truth を取得しなくてよい。検索結果に Truth の行が含まれ、その運用規則が調査に必要な場合は、その行の本文を参照する。
 
 Truth DB の ID: `2bbd69c1-e2e7-80a1-a417-fef735312572`
 
@@ -37,7 +41,11 @@ Truth DB の ID: `2bbd69c1-e2e7-80a1-a417-fef735312572`
 
 Truth の読み方を定める行が見つからない場合、またはその記述と実際のプロパティや行が食い違う場合は、推測で補わず、食い違った箇所を利用者に報告すること。仕様書と実際の DB が食い違う場合は書き込みを行わず、食い違いを報告すること。
 
-Notion の調査をサブエージェントへ委譲する場合は、取得した運用規則のうち、調査に必要な対象 DB、プロパティ、階層の情報をプロンプトに含める。委譲先は、この Skill を読み込まず、Notion MCP を利用できない場合もある。Notion への書き込みは委譲せず、自身で実行すること。
+Notion への書き込みは委譲せず、自身で実行すること。Notion の調査をサブエージェントへ委譲する場合、委譲先はこの Skill を読み込まず、Notion MCP を利用できない場合もある。運用規則を取得済みであれば、調査に必要な対象 DB、プロパティ、階層の情報をプロンプトに含める。
+
+## Notion MCP で取得できないページ
+
+利用者が閲覧できるゲスト共有ページの取得が Notion MCP で `object_not_found` となる場合は、ブラウザーを操作できる環境で Notion へのログインを利用者自身に依頼し、利用者の閲覧権限の範囲でページを確認する。
 
 ## 書き込みの手順
 

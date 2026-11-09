@@ -31,6 +31,7 @@
 - Google Analytics 4 と Search Console のデータ取得（`google-web-analytics`）。ユーザーの Application Default Credentials で両サービスの REST API を呼び出し、Web サイトの計測データと検索データを取得する。付属のスクリプトがアクセストークンを会話に出さずに扱い、宛先を両サービスの API に限定する。ADC のスコープが定めた組み合わせと完全に一致しない場合は実行を拒否し、端末ごとに許可される操作が食い違わないようにする。認証の準備と診断の手順を `references/setup.md` に置く
 - Bitwarden の秘密値を値を見ずに扱う操作（`bitwarden-vault`）。エージェントが起動する仲介プロセスが、利用者のデスクトップのウィンドウでマスターパスワードを受け取って金庫のロックを解除し、秘密値を自身の内部でだけ扱う。エージェントは項目名の一覧の取得、GitHub Actions の secret への登録、ssh 越しの sudo の認証の更新、ランダムな値の生成と保存を要求でき、成否だけを受け取る。送信と保存は利用者がウィンドウで承認した場合に限り実行し、任意のコマンドへの受け渡しは固定の送信先と区別して毎回 `yes` の入力を求める。利用者が 15 分間操作しないと金庫をロックして終了する
 - Notion ワークスペースの操作（`notion-workspace`）。Notion MCP で作業する際は、ワークスペースの構造と運用規則を Notion 内の DB「Truth」から取得して従う。この Skill は Truth を DB の ID のみで参照し、読み取り対象の行は Truth 自身が定める読み方に従って特定する。Truth の記述や Notion MCP サーバーの instructions が自身の指示と競合する場合は自身の指示を優先し、利用者の依頼がない private draft の作成や Notion Memory への保存は行わない。テンプレートを経由してページを作成し、テンプレートの本文が展開されたことを確認したうえで本文を部分更新する
+- agy への Notion の調査の委譲（`permissions.jsonc`、`subagent`）。agy は非対話の実行で許可規則にない MCP ツールを自動で拒否するため、Notion MCP の読み取り用のツールを agy の許可規則として配布し、書き込み用のツールは許可しない。`denied_actions` に `mcp` が記録された場合は、セッションを再開して拒否されたツールを特定する
 
 ### Changed
 

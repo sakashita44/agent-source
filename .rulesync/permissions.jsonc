@@ -12,6 +12,23 @@
         // ファイルへ書き出す --output と、ブラウザを開く --web は読み取りの範囲を超える。
         "regex:git .*--output.*": "deny",
         "regex:gh .*--web.*": "deny"
+      },
+      // Notion の調査を委譲できるよう、Notion MCP の読み取り用のツールを許可する。
+      // notion-query-data-sources の説明文が事前の呼び出しを要求する notion-get-tool-access も含める。
+      // Notion への書き込みは委譲しないため、作成、更新、削除のツールは許可しない。
+      "mcp": {
+        "notion/notion-search": "allow",
+        "notion/notion-fetch": "allow",
+        "notion/notion-query-data-sources": "allow",
+        "notion/notion-query-multiple-data-sources": "allow",
+        "notion/notion-get-tool-access": "allow",
+        // agy にも配布する notion-workspace が、作業の開始時の呼び出しを求める。
+        "notion/notion-get-enabled-skills": "allow",
+        "notion/notion-get-comments": "allow",
+        "notion/notion-list-page-backlinks": "allow",
+        "notion/notion-get-users": "allow",
+        "notion/notion-get-teams": "allow",
+        "notion/notion-get-self": "allow"
       }
     }
   }
