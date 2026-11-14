@@ -28,7 +28,7 @@ Markdown 文書、PR description、doc comment、ADR に適用する。コミッ
 ## 参照先
 
 - `references/structure.md`: 見出し、リスト、情報の順序、構成案の設計時に参照する
-- `references/content-types.md`: README、手順、コード例、Reference、設計・アーキテクチャ文書の作成時に参照する
+- `references/content-types.md`: README、要求文書、手順、コード例、Reference、設計・アーキテクチャ文書の作成時に参照する
 - `references/review-examples.md`: 規則の適用可否に迷ったときや、レビューで違反理由を説明するときに参照する。通常の執筆では参照しない
 
 ## 機械検査
