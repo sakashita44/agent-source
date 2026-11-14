@@ -10,7 +10,7 @@ description: >-
 
 開発領域ごとに、採用方式を決定する前に確認すべき情報源を定める。領域別の参考情報は [references](references) に格納する。
 
-この Skill は、確認すべき情報源と確認手順を定める。個々のライブラリ選定における判断基準は `engineering-principles` を参照する。
+この Skill は、確認すべき情報源と確認手順を定める。個々のライブラリ選定における判断基準は `engineering-principles` を参照のこと。
 
 ## 参考の位置づけ
 

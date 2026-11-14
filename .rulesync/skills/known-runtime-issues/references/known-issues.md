@@ -5,7 +5,7 @@
 一致条件:
 
 - Windows 上の Codex のサンドボックス内で実行している。elevated のサンドボックスでは発生しないため、elevated と確認できる場合は一致しない
-- Python 3.12.4 以降で実行している。uv が用意する Python も含む
+- Python 3.12.4 以降で実行している。uv が提供する Python も含む
 - mode `0o700` で作成したディレクトリへの読み書きで `PermissionError`（`WinError 5`）が発生する。`tempfile.mkdtemp()`、`tempfile.TemporaryDirectory()`、`os.mkdir(path, 0o700)`、pytest の `tmp_path` は、この mode でディレクトリを作成する
 - 失敗したコマンド自身がそのディレクトリを作成している
 
@@ -48,8 +48,8 @@
 
 対応:
 
-- 同じ PowerShell で再試行しないこと
-- cmd.exe、Microsoft Store 版以外の PowerShell、エージェントが提供するほかの実行手段など、サンドボックス内で起動できる経路を選んで同じ処理を実行する
+- 同じ PowerShell で再試行しない
+- cmd.exe、Microsoft Store 版以外の PowerShell、エージェントが提供するほかの実行手段など、サンドボックス内で起動できる経路を選択し、同じ処理を実行する
 - サンドボックス内で起動できる経路では実行できない処理であれば、この事例に一致したことを報告して停止する
 
 出典:

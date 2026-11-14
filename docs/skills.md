@@ -20,8 +20,8 @@
 | Skill | 用途 | 起動 |
 | --- | --- | --- |
 | `engineering-principles` | 設計、実装、レビュー、技術的な提案で、解決の範囲、手段の選択、既存の構造との整合を判断する | 自動 |
-| `artifact-principles` | 情報と意図を、コード、テスト、コメント、Issue、文書、ADR のどこに置くかを判断する | 自動 |
-| `writing-principles` | 文書、Issue、PR description、コメント、コミットメッセージなど、残る文章を書く、直す、レビューする | 自動 |
+| `artifact-principles` | 情報と意図を、コード、テスト、コメント、Issue、文書、ADR のどこに配置するかを判断する | 自動 |
+| `writing-principles` | 文書、Issue、PR description、コメント、コミットメッセージなど、残る文章を執筆、修正、レビューする | 自動 |
 | `verification-principles` | 検証方法を選び、証拠を評価し、作業の完了を判定する | 自動 |
 | `git-general` | Git の状態や履歴を参照し、ブランチ、コミット、PR、リリースを操作または提案する | 自動 |
 | `subagent` | サブエージェントへ作業を委譲する際に、委譲先、依頼文、結果の検証方法を決める | 自動 |
@@ -33,8 +33,8 @@
 | Skill | 用途 | 起動 |
 | --- | --- | --- |
 | `grill-me` | 要件、範囲、成功基準が定まっていないときに、質問を重ねて要件を固める | 明示 |
-| `plan` | 機能やマイルストーンを計画し、ロードマップを作り、作業を Issue に分解する | 自動 |
-| `implement` | 方針が決まった実装を始める。実装中はコメントを書かず、完了後に `add-comment` を行う | 自動 |
+| `plan` | 機能やマイルストーンを計画し、ロードマップを作成し、作業を Issue に分解する | 自動 |
+| `implement` | 方針が決まった実装を始める。実装中はコメントを書かず、完了後に `add-comment` を実行する | 自動 |
 | `add-comment` | 実装に関わっていないエージェントにコメントの内容を決めさせ、その提案を反映する | 自動 |
 | `justify-code` | 既存のコードのうち、現在の要求で正当化できない部分や、標準ライブラリや既存の依存で置き換えられる部分を報告する | 明示 |
 | `independent-review` | 経緯を共有しない別のエージェントに変更をレビューさせ、結果を統合する | 明示 |
@@ -44,20 +44,20 @@
 
 | Skill | 用途 | 起動 |
 | --- | --- | --- |
-| `write-docs` | 技術文書、README、ADR、PR description を書き、機械検査まで行う | 自動 |
+| `write-docs` | 技術文書、README、ADR、PR description を執筆し、機械検査まで実行する | 自動 |
 | `refine-docs` | 書き上げた日本語の文書を推敲し、修正前後の対比と戻す候補を報告する | 自動 |
 | `verify-docs` | 文書が文書作成の規則に従っているかを検証する | 明示 |
 | `verify-manual` | 手順書の本文だけで作業を遂行できるか、実行計画を立てさせて実環境と照合する | 明示 |
-| `natural-japanese` | 日本語の文章を自然で読みやすく直し、AI らしさを診断する。外部リポジトリ `coji/natural-japanese` から取り込む | 自動 |
+| `natural-japanese` | 日本語の文章を自然で読みやすく修正し、AI らしさを診断する。外部リポジトリ `coji/natural-japanese` から取り込む | 自動 |
 
 ### 調査と Git の操作
 
 | Skill | 用途 | 起動 |
 | --- | --- | --- |
-| `deep-research` | 複数の情報源にあたる調査や比較を、計画の承認を経て行い、出典付きのレポートにまとめる | 自動 |
+| `deep-research` | 複数の情報源にあたる調査や比較を、計画の承認を経て実施し、出典付きのレポートにまとめる | 自動 |
 | `google-web-analytics` | Web サイトやブログの Google Analytics 4 と Search Console のデータを、ユーザーの認証情報で API から取得する | 自動 |
 | `bitwarden-vault` | Bitwarden の金庫の秘密値を、値を見ずに GitHub Actions の secret への登録、ssh 越しの sudo の認証、生成と保存に用いる。項目の一覧、メモの読み取り、名前、メモ、URI、ユーザー名の変更、フォルダの一覧の取得と作成、項目のフォルダの移動（一括の移動を含む）、パスワードの健全性の確認で金庫を棚卸しする。SSH キーの項目の公開鍵とフィンガープリントを取得し、手元の鍵と照合する。秘密値を含みうる操作は利用者がウィンドウで承認する | 自動 |
 | `notion-workspace` | Notion MCP を用いて利用者の Notion ワークスペースを操作する。ワークスペースの DB 構成、階層、テンプレート、命名などの運用規則を Notion 内の DB「Truth」から取得して従う | 自動 |
 | `commit` | 変更の単位を確定し、Conventional Commits の形式でコミットする | 自動 |
 | `pr-merge` | CI、レビュー、CHANGELOG を確認して PR をマージし、ブランチを整理する | 自動 |
-| `release` | CHANGELOG の Unreleased を版へ昇格し、タグと GitHub Release を作る | 自動 |
+| `release` | CHANGELOG の Unreleased を版へ昇格し、タグと GitHub Release を作成する | 自動 |

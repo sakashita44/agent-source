@@ -2,7 +2,7 @@
 
 `google-web-analytics` が用いる ADC を用意する手順と、アクセストークンを取得できない場合の診断手順を定める。
 
-ADC の作成にはブラウザでの同意が必要であり、OAuth クライアントの作成は Google Cloud コンソールでのみ実行できる。エージェントはこれらの操作をユーザーへ依頼し、手順の提示と、`gcloud` で完結する手順の実行を担う。`gcloud` で完結する手順であっても、Google Cloud プロジェクトの作成や API の有効化など外部の状態を変更する操作は、実行前にユーザーの承認を得ること。
+ADC の作成にはブラウザでの同意を要し、OAuth クライアントの作成は Google Cloud コンソールでのみ実行できる。エージェントはこれらの操作をユーザーへ依頼し、手順の提示と、`gcloud` で完結する手順の実行を担う。`gcloud` で完結する手順であっても、Google Cloud プロジェクトの作成や API の有効化など外部の状態を変更する操作は、実行前にユーザーの承認を得ること。
 
 ## Google アカウントごとに一度行う準備
 
@@ -38,11 +38,11 @@ GA4 と Search Console のスコープは Google Cloud 外の API に属する�
 gcloud auth application-default login --client-id-file=<OAuth クライアントの JSON ファイルのパス> --scopes=https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/analytics.readonly,https://www.googleapis.com/auth/webmasters.readonly
 ```
 
-このコマンドを実行すると、該当端末の既存の ADC が上書きされる。付属スクリプトは、ADC のスコープがこのコマンドの `--scopes` と完全に一致しない場合に実行を拒否する。そのため、ADC を別のスコープを要する用途と共有できない。
+このコマンドを実行すると、該当端末の既存の ADC が上書きされる。付属スクリプトは、ADC のスコープがこのコマンドの `--scopes` と一致しない場合に実行を拒否する。そのため、ADC を別のスコープを要する用途と共有できない。
 
-ADC の作成後、ユーザーが作成した JSON ファイルを削除する。日常の実行では JSON ファイルを用いない。
+ADC の作成後、ユーザーは作成した JSON ファイルを削除する。日常の実行では JSON ファイルを用いない。
 
-作成後、次の各要求が成功することを確認する。
+作成後、次の各リクエストが成功することを確認する。
 
 ```bash
 node <Skill のディレクトリ>/scripts/google-api.mjs GET https://analyticsadmin.googleapis.com/v1beta/accountSummaries
