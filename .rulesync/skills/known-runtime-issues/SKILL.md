@@ -10,7 +10,7 @@ description: >-
 
 # Known Runtime Issues
 
-実行基盤、サンドボックス、ツールチェーンに起因すると思われる失敗を既知の事例と照合し、対応を決める。事例は [既知の事例](references/known-issues.md) に記載する。
+実行基盤、サンドボックス、またはツールチェーンに起因する疑いがある失敗を既知の事例と照合し、対応を決定する。事例は [既知の事例](references/known-issues.md) に定義する。
 
 ## 照合の手順
 
