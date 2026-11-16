@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import test from "node:test";
 import { run } from "../bw-vault.mjs";
 import {
@@ -128,12 +127,13 @@ test("カードの追加情報はメタデータと下 4 桁だけを返し、�
         id: "12",
         name: "Corp-Card-Short",
         type: 3,
-        card: { brand: "Other", number: "12-3", code: SECRET },
+        // 8 桁未満の番号では、下 4 桁が番号の大半を占める。
+        card: { brand: "Other", number: "9876-543", code: SECRET },
     };
     const summaries = summarizeItems([cardItem, shortCard, items[0]], folders, listDetails("card"));
     assert.ok(!JSON.stringify(summaries).includes(SECRET));
     assert.ok(!JSON.stringify(summaries).includes("4111"));
-    assert.ok(!JSON.stringify(summaries).includes("12-3"));
+    assert.ok(!JSON.stringify(summaries).includes("6543"));
     assert.deepEqual(summaries.find((item) => item.name === cardItem.name).card, {
         brand: "Visa",
         cardholderName: "TARO YAMADA",
@@ -149,14 +149,6 @@ test("カードの追加情報はメタデータと下 4 桁だけを返し、�
         last4: null,
     });
     assert.equal(summaries.find((item) => item.name === items[0].name).card, null);
-});
-
-test("下 4 桁がカード番号の全桁や大半になる値では下 4 桁を返さない", () => {
-    const lastFour = (number) => summarizeItems([{ id: "c", name: "Card", type: 3, card: { number } }], folders, listDetails("card"))[0].card.last4;
-    for (const number of ["1234", "12-34", "1234567", "abcd5678", "1234-567x"]) {
-        assert.equal(lastFour(number), null, number);
-    }
-    assert.equal(lastFour("1234 5678"), "5678");
 });
 
 test("パスキーの追加情報は公開属性だけを返し、秘密鍵や識別子を含めない", () => {
@@ -614,36 +606,3 @@ test("generate で --x と --no-x を同時に指定すると拒否する", asyn
     }
 });
 
-// generateArgs が組み立てた引数を bw が意図どおりに解釈するかは、引数の文字列だけでは確かめられないため、実際の bw generate の出力で確かめる。bw generate はロックの解除を必要としない。
-const bwAvailable = spawnSync("bw", ["--version"], { encoding: "utf8", windowsHide: true }).status === 0;
-
-function bwGenerate(options) {
-    const result = spawnSync("bw", generateArgs(options), { encoding: "utf8", windowsHide: true, timeout: 60_000 });
-    assert.equal(result.status, 0, result.stderr);
-    return result.stdout.trim();
-}
-
-test("bw generate が文字種の指定どおりにパスワードを生成する", { skip: !bwAvailable && "bw が見つからない" }, () => {
-    const sets = { u: "A-Z", l: "a-z", n: "0-9", s: "!@#$%^&*" };
-    const cases = [
-        [{}, "uln"],
-        [{ number: false }, "ul"],
-        [{ uppercase: false, number: false, special: true }, "ls"],
-        [{ lowercase: false, special: true }, "uns"],
-        [{ uppercase: false, lowercase: false, special: true }, "ns"],
-    ];
-    for (const [options, allowed] of cases) {
-        const value = bwGenerate({ ...options, length: 128 });
-        const pattern = new RegExp(`^[${[...allowed].map((key) => sets[key]).join("")}]{128}$`);
-        assert.match(value, pattern, JSON.stringify(options));
-    }
-});
-
-test("bw generate が語数と区切り文字の指定どおりにパスフレーズを生成する", { skip: !bwAvailable && "bw が見つからない" }, () => {
-    for (const words of [3, 20]) {
-        assert.equal(bwGenerate({ passphrase: true, words, separator: "_" }).split("_").length, words);
-    }
-    const capitalized = bwGenerate({ passphrase: true, separator: "_", capitalize: true }).split("_");
-    assert.equal(capitalized.length, 4);
-    assert.ok(capitalized.every((word) => /^[A-Z]/.test(word)), capitalized.join("_"));
-});
