@@ -3,15 +3,16 @@ name: bitwarden-vault
 description: >-
   Use when a task needs a secret stored in the user's Bitwarden vault without
   seeing it, or needs to take stock of or tidy up the vault, such as listing
-  items with their URIs and usernames to reconcile them with a credential
-  ledger, reading notes, renaming items, updating their notes, URIs, and
-  usernames, listing and creating folders, moving one or more items
-  between folders,
-  reading the public key and fingerprint of an SSH key item to compare it with
-  a local key, checking password strength and reuse, registering a secret as a GitHub
-  Actions secret, refreshing sudo authentication on a remote host over ssh,
-  or generating and saving a new random secret. A broker process in a window on the user's Windows desktop
-  holds the unlocked vault and asks the user to approve each transfer.
+  items with their URIs, usernames, card metadata, and passkey registrations to
+  reconcile them with a credential ledger, comparing secret fields across items
+  without revealing values, reading notes, renaming items, updating their notes,
+  URIs, and usernames, listing and creating folders, moving one or more items
+  between folders, reading the public key and fingerprint of an SSH key item to
+  compare it with a local key, checking password strength and reuse, registering
+  a secret as a GitHub Actions secret, refreshing sudo authentication on a
+  remote host over ssh, or generating and saving a new random password or
+  passphrase. A broker process in a window on the user's Windows desktop holds
+  the unlocked vault and asks the user to approve each transfer.
 ---
 
 # Bitwarden Vault
@@ -44,7 +45,7 @@ Windows の Codex では、仲介プロセスの起動と付属スクリプト�
 
 ## 操作
 
-`send`、`generate`、`edit`、`move`、`folder-create` と、内容のある項目を対象とする `notes` は、仲介プロセスのウィンドウで利用者が承認した場合に限り実行される。`--reason` には、利用者が承認の可否を判断できるよう、目的と影響を日本語で具体的に指定すること。応答の `approved` が `false` の場合は、利用者が要求を拒否したことを示す。理由を利用者に確認し、同じ要求を繰り返さないこと。ただし `cancelled` が `true` の場合は、利用者が拒否したのではなく、仲介プロセスの終了によって要求が取り消されている。`start` で仲介プロセスを起動し直してから、同じ要求をやり直してよい。
+`send`、`generate`、`edit`、`move`、`folder-create` と、内容のある項目を対象とする `notes` は、仲介プロセスのウィンドウで利用者が承認した場合に限り実行される。`--reason` には、利用者が承認の可否を判断できるよう、目的と影響を日本語で具体的に指定すること。応答の `approved` が `false` の場合は、利用者が要求を拒否したことを示す。拒否時に利用者が入力した理由は `reason` に返される。`reason` が `null` でない場合は、その理由に沿って対応を見直すこと。`reason` が `null` の場合は、理由を利用者に確認し、同じ要求を繰り返さないこと。ただし `cancelled` が `true` の場合は、利用者が拒否したのではなく、仲介プロセスの終了によって要求が取り消されている。`start` で仲介プロセスを起動し直してから、同じ要求をやり直してよい。
 
 承認を求める操作は、利用者が承認するまで応答を返さない。コマンドの実行に時間制限があるエージェントでは、制限を 10 分程度に設定すること。応答を待たずに付属スクリプトが中断された場合、その要求は取り消され、利用者が後から承認しても実行されない。
 
@@ -62,6 +63,22 @@ node <Skill のディレクトリ>/scripts/bw-vault.mjs list [--search <文字�
 - `fields`: カスタムフィールドの名前と種別。値は含まれない
 - `flags`: メモと TOTP の有無、お気に入り、マスターパスワードの再要求の設定
 - `sshKey`: SSH キーの項目の公開鍵とフィンガープリント（`SHA256:` で始まる形式）。秘密鍵は含まれない。SSH キー以外の項目では `null` となる。手元の鍵と照合する場合は、`ssh-keygen -lf <公開鍵のファイル>` が出力するフィンガープリントと比較すること
+- `card`: カード項目のブランド、名義人、有効期限（月・年）、カード番号の下 4 桁。カード番号の全桁とセキュリティコード（CVV）は含まれない。カード以外の項目では `null` となる。空白とハイフンを除いたカード番号が 8 桁未満の項目と、数字以外を含む項目では、下 4 桁（`last4`）が `null` となる
+- `passkeys`: ログイン項目に登録されたパスキーの `rpId`、`rpName`、`userName`、`userDisplayName`、`discoverable`、作成日時（`created`）。秘密鍵（`keyValue`）、識別子（`credentialId`、`userHandle`）、署名カウンタ（`counter`）は含まれない。パスキーがない項目では空配列となる
+
+複数の項目間で、秘密値そのものを返さずに指定フィールドの値が一致するかを照合する。応答の `itemCount` には対象件数が、`fields` には指定フィールドごとの `groups`（2 件以上一致した項目名の組）と `missing`（未設定の項目一覧）が返される。値が設定されているが他のどの項目とも一致しない項目は、`groups` にも `missing` にも含まれない。対象に同名の項目がある場合は、その名前が `duplicateNames` に返される。`groups` と `missing` では同名の項目を区別できないため、`duplicateNames` が空でない場合は、Bitwarden での改名を利用者に依頼すること。秘密値を含まないため、承認なしで返される。
+
+```bash
+node <Skill のディレクトリ>/scripts/bw-vault.mjs compare --field <フィールド> (--item <項目名> [--item <項目名>...] | --search <文字列> | --all)
+```
+
+`--field` には次の値を指定する。複数の値を指定する場合は、コンマで区切るか、`--field` を複数回指定する。`--item` で対象を選ぶ場合は、重複なく 2 件以上を指定すること。
+
+- `password`: ログイン項目のパスワード（完全一致）
+- `totp`: ログイン項目の TOTP 設定値（完全一致）
+- `card.number`: カード番号（空白とハイフンを除去して比較）
+- `notes`: メモの本文（改行を `\n` に統一して比較）
+- `field:<名前>`: 指定した名前のカスタムフィールドの値（種別を問わず完全一致）。同じ名前のフィールドが 1 つの項目に複数ある場合は、値が空でない最初のフィールドが比較される
 
 フォルダの一覧を取得する。応答には、項目を含まない空のフォルダを含むフォルダ名とフォルダごとの項目数、フォルダに属さない項目の数が含まれる。`list` の応答には項目を含むフォルダしか出力されないため、`--folder` に指定するフォルダ名はこの一覧で確認すること。承認なしで返される。
 
@@ -135,16 +152,19 @@ node <Skill のディレクトリ>/scripts/bw-vault.mjs send command --item <項
 
 `send` の応答に含まれる `exitCode` は、受け渡し先のコマンドの終了コードである。コマンドの出力は仲介プロセスのウィンドウにのみ表示されるため、失敗した場合は利用者にウィンドウの表示内容の確認を依頼すること。
 
-ランダムな値を生成し、新しいログイン項目のパスワードとして保存する。利用者が手動で入力する必要のない秘密値に限って用いる。項目名は `{対象サービス}-{種別}-{ラベル}` の形式とし、種別は `Token`、`Account`、`KeyPair` のいずれかとする。対象サービスには ASCII の英数字と `.` を、ラベルには ASCII の英数字と `.`、`_`、`-` を用いる。同名の項目がすでに存在する場合は拒否される。
+ランダムな値を生成し、新しいログイン項目のパスワードとして保存する。既定の通常パスワード生成は、利用者が手動で入力する必要のない秘密値に用いる。パスフレーズは、利用者が手動で入力する秘密値として求めた場合に限って生成すること。項目名は `{対象サービス}-{種別}-{ラベル}` の形式とし、種別は `Token`、`Account`、`KeyPair`、`SymmetricKey` のいずれかとする。対象サービスには ASCII の英数字と `.` を、ラベルには ASCII の英数字と `.`、`_`、`-` を用いる。同名の項目がすでに存在する場合は拒否される。
 
 ```bash
-node <Skill のディレクトリ>/scripts/bw-vault.mjs generate --name <項目名> [--folder <フォルダ名>] [--username <ユーザー名>] [--uris <JSON>] [--notes <メモ>] [--length <16〜128>] [--special] --reason <説明>
+node <Skill のディレクトリ>/scripts/bw-vault.mjs generate --name <項目名> [--folder <フォルダ名>] [--username <ユーザー名>] [--uris <JSON>] [--notes <メモ>] [--length <16〜128>] [--uppercase | --no-uppercase] [--lowercase | --no-lowercase] [--number | --no-number] [--special] --reason <説明>
+node <Skill のディレクトリ>/scripts/bw-vault.mjs generate --name <項目名> [--folder <フォルダ名>] [--username <ユーザー名>] [--uris <JSON>] [--notes <メモ>] --passphrase [--words <3〜20>] [--separator <1文字>] [--capitalize] [--include-number] --reason <説明>
 ```
 
 - `--folder`: 既存のフォルダ名を指定する。フォルダ名は完全一致で照合され、存在しないフォルダは拒否される。フォルダに所属しない項目として保存する場合は省略する
 - `--username`: 項目のユーザー名を登録する
 - `--uris`: 項目の URI を登録する。形式は `edit` の `--uris` と同じである
 - `--notes`: 項目のメモを登録する。秘密値はメモに含めないこと。メモの内容は承認画面に表示される
+- `--length` / `--uppercase` / `--lowercase` / `--number` / `--special`: 既定の生成方式である通常パスワード生成の条件を指定する。`--length` は 16〜128 の範囲で指定し、既定値は 32 である。`--uppercase`、`--lowercase`、`--number` は既定で有効であり、それぞれ `--no-` 付きのオプションで無効にできる。`--special` は既定で無効である。少なくとも 1 つの文字種を有効にすること。`--passphrase` とは併用できない
+- `--passphrase` / `--words` / `--separator` / `--capitalize` / `--include-number`: パスフレーズを生成する。`--words` は 3〜20 の範囲で指定し、既定値は 4 である。`--separator` には空白や制御文字を含まない 1 文字を指定し、既定値は `-` である。`--capitalize` を指定すると各単語の先頭が大文字になり、`--include-number` を指定すると数字が含まれる。通常パスワード生成のオプションとは併用できない
 
 保存した値を利用する場合は、続けて `send` で受け渡す。保存後は、項目の用途と期限を利用者が台帳に記録できるよう、項目名を利用者に報告すること。
 
@@ -172,4 +192,10 @@ node <Skill のディレクトリ>/scripts/bw-vault.mjs generate --name <項目�
 | `were changed elsewhere` | `list` で最新の内容を確認してから、`move` を再実行する |
 | `Moved before the failure` | エラーに示された項目は移動済みである。仲介プロセスのウィンドウに表示された `bw` のエラーの確認を利用者に依頼し、残りの項目だけを対象に `move` を再実行する |
 | `was changed elsewhere` | `list` や `notes` で最新の内容を確認してから、`edit` を再実行する |
+| `Unknown --field value` | `compare` の `--field` には `password`、`totp`、`card.number`、`notes`、`field:<名前>` のいずれかを指定する |
+| `at least two --item values to compare` | `compare` で `--item` を用いる場合は、照合する項目を重複なく 2 件以上指定する |
+| `require --passphrase` | `--words`、`--separator`、`--capitalize`、`--include-number` は、`--passphrase` とあわせて指定する |
+| `cannot be used with --passphrase` | `--passphrase` を指定する場合は、`--length`、`--uppercase`、`--no-uppercase`、`--lowercase`、`--no-lowercase`、`--number`、`--no-number`、`--special` を指定しない |
+| `Enable at least one character set` | `generate` の通常パスワード生成では、少なくとも 1 つの文字種を有効にする |
+| `Words must be an integer` / `Separator must be a single` | `--words` には 3〜20 の整数を、`--separator` には空白や制御文字を含まない 1 文字を指定する |
 | `bw ... failed` | 仲介プロセスのウィンドウに表示された `bw` のエラーの確認を利用者に依頼する |

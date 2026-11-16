@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { run } from "../bw-vault.mjs";
 import {
     applyEdit,
     assertItemName,
@@ -9,7 +10,10 @@ import {
     buildFixedCommand,
     buildLoginItem,
     changedItems,
+    charDisplayWidth,
     clientName,
+    compareFields,
+    compareItems,
     displaySafe,
     displaySafeOutput,
     findFolderId,
@@ -24,6 +28,7 @@ import {
     parseUris,
     partitionMove,
     passwordOf,
+    selectItems,
     summarizeFolders,
     summarizeHealth,
     summarizeItems,
@@ -43,7 +48,7 @@ const items = [
 const folders = [{ id: null, name: "No Folder" }, { id: "f1", name: "Dev" }];
 
 test("命名規則に合う項目名を受け付ける", () => {
-    for (const name of ["GitHub-Token-ClaudeDesktopMCP", "Google-Account-University", "SSH-KeyPair-HomePC-202602"]) {
+    for (const name of ["GitHub-Token-ClaudeDesktopMCP", "Google-Account-University", "SSH-KeyPair-HomePC-202602", "API-SymmetricKey-HMAC2026"]) {
         assert.equal(assertItemName(name), name);
     }
 });
@@ -102,6 +107,223 @@ test("SSH キーの追加情報は公開鍵とフィンガープリントだけ�
     const login = summaries.find((item) => item.name === items[0].name);
     assert.deepEqual(ssh.sshKey, { publicKey: "ssh-ed25519 AAAAC3Nza dummy", keyFingerprint: "SHA256:dummyFingerprint" });
     assert.equal(login.sshKey, null);
+});
+
+test("カードの追加情報はメタデータと下 4 桁だけを返し、番号全桁と CVV を含めない", () => {
+    const cardItem = {
+        id: "11",
+        name: "Corp-Card-Main",
+        type: 3,
+        card: {
+            brand: "Visa",
+            cardholderName: "TARO YAMADA",
+            number: "4111-2222 3333-4567",
+            expMonth: "08",
+            expYear: "2029",
+            code: SECRET,
+        },
+    };
+    const shortCard = {
+        id: "12",
+        name: "Corp-Card-Short",
+        type: 3,
+        // 8 桁未満の番号では、下 4 桁が番号の大半を占める。
+        card: { brand: "Other", number: "9876-543", code: SECRET },
+    };
+    const summaries = summarizeItems([cardItem, shortCard, items[0]], folders, listDetails("card"));
+    assert.ok(!JSON.stringify(summaries).includes(SECRET));
+    assert.ok(!JSON.stringify(summaries).includes("4111"));
+    assert.ok(!JSON.stringify(summaries).includes("6543"));
+    assert.deepEqual(summaries.find((item) => item.name === cardItem.name).card, {
+        brand: "Visa",
+        cardholderName: "TARO YAMADA",
+        expMonth: "08",
+        expYear: "2029",
+        last4: "4567",
+    });
+    assert.deepEqual(summaries.find((item) => item.name === shortCard.name).card, {
+        brand: "Other",
+        cardholderName: null,
+        expMonth: null,
+        expYear: null,
+        last4: null,
+    });
+    assert.equal(summaries.find((item) => item.name === items[0].name).card, null);
+});
+
+test("パスキーの追加情報は公開属性だけを返し、秘密鍵や識別子を含めない", () => {
+    const passkeyItem = {
+        id: "13",
+        name: "GitHub-Account-Passkey",
+        type: 1,
+        login: {
+            fido2Credentials: [
+                {
+                    credentialId: "cred-id-secret",
+                    keyType: "public-key",
+                    keyAlgorithm: "ECDSA",
+                    keyCurve: "P-256",
+                    keyValue: SECRET,
+                    rpId: "github.com",
+                    rpName: "GitHub",
+                    userHandle: "user-handle-secret",
+                    userName: "saka",
+                    userDisplayName: "Saka",
+                    counter: "5",
+                    discoverable: "true",
+                    creationDate: "2026-05-01T00:00:00Z",
+                },
+                {
+                    rpId: "example.com",
+                    discoverable: false,
+                },
+            ],
+        },
+    };
+    const summaries = summarizeItems([passkeyItem, items[0]], folders, listDetails("passkeys"));
+    const serialized = JSON.stringify(summaries);
+    assert.ok(!serialized.includes(SECRET));
+    assert.ok(!serialized.includes("cred-id-secret"));
+    assert.ok(!serialized.includes("user-handle-secret"));
+    assert.ok(!serialized.includes("counter"));
+    assert.deepEqual(summaries.find((item) => item.name === passkeyItem.name).passkeys, [
+        {
+            rpId: "github.com",
+            rpName: "GitHub",
+            userName: "saka",
+            userDisplayName: "Saka",
+            discoverable: true,
+            created: "2026-05-01T00:00:00Z",
+        },
+        {
+            rpId: "example.com",
+            rpName: null,
+            userName: null,
+            userDisplayName: null,
+            discoverable: false,
+            created: null,
+        },
+    ]);
+    assert.deepEqual(summaries.find((item) => item.name === items[0].name).passkeys, []);
+});
+
+test("照合するフィールド指定を検証し、順序を保って重複を除く", () => {
+    assert.deepEqual(compareFields("password, totp"), ["password", "totp"]);
+    assert.deepEqual(compareFields(["password,card.number", "totp,password", "field:PIN"]), [
+        "password",
+        "card.number",
+        "totp",
+        "field:PIN",
+    ]);
+    assert.deepEqual(compareFields("notes"), ["notes"]);
+    assert.throws(() => compareFields(undefined), /at least one --field/);
+    assert.throws(() => compareFields([]), /at least one --field/);
+    assert.throws(() => compareFields(" , "), /at least one --field/);
+    assert.throws(() => compareFields("field:"), /must not be empty/);
+    assert.throws(() => compareFields("field:   "), /must not be empty/);
+    assert.throws(() => compareFields("username"), /Unknown --field value: username/);
+});
+
+test("秘密値の一致照合は秘密値を返さず、一致グループと未設定だけを返す", () => {
+    const compareSource = [
+        {
+            id: "c1",
+            name: "ItemB",
+            type: 1,
+            notes: "line1\r\nline2",
+            login: { password: `${SECRET}-1`, totp: "TOTP-A" },
+            fields: [{ name: "PIN", value: "", type: 1 }, { name: "PIN", value: "9999", type: 1 }],
+        },
+        {
+            id: "c2",
+            name: "ItemA",
+            type: 1,
+            notes: "line1\nline2",
+            login: { password: `${SECRET}-1`, totp: "TOTP-UNIQUE" },
+            fields: [{ name: "PIN", value: "9999", type: 0 }],
+        },
+        {
+            id: "c3",
+            name: "ItemD",
+            type: 3,
+            card: { number: "4111 2222-3333 4444" },
+            fields: [{ name: "Flag", value: "true", type: 2 }],
+        },
+        {
+            id: "c4",
+            name: "ItemC",
+            type: 3,
+            card: { number: "4111-2222-3333-4444" },
+            fields: [{ name: "Flag", value: "true", type: 0 }],
+        },
+        {
+            id: "c5",
+            name: "ItemE",
+            type: 3,
+            notes: "",
+            card: { number: "  --- " },
+            login: { password: `${SECRET}-UNIQUE`, totp: "" },
+        },
+    ];
+    const result = compareItems(compareSource, ["password", "totp", "card.number", "notes", "field:PIN", "field:Flag"]);
+    const serialized = JSON.stringify(result);
+    assert.ok(!serialized.includes(SECRET));
+    assert.ok(!serialized.includes("TOTP-"));
+    assert.ok(!serialized.includes("4111"));
+    assert.ok(!serialized.includes("9999"));
+    assert.ok(!serialized.includes("line1"));
+    assert.equal(result.itemCount, 5);
+    assert.deepEqual(result.fields.password, {
+        groups: [["ItemA", "ItemB"]],
+        missing: ["ItemC", "ItemD"],
+    });
+    assert.deepEqual(result.fields.totp, {
+        groups: [],
+        missing: ["ItemC", "ItemD", "ItemE"],
+    });
+    assert.deepEqual(result.fields["card.number"], {
+        groups: [["ItemC", "ItemD"]],
+        missing: ["ItemA", "ItemB", "ItemE"],
+    });
+    assert.deepEqual(result.fields.notes, {
+        groups: [["ItemA", "ItemB"]],
+        missing: ["ItemC", "ItemD", "ItemE"],
+    });
+    assert.deepEqual(result.fields["field:PIN"], {
+        groups: [["ItemA", "ItemB"]],
+        missing: ["ItemC", "ItemD", "ItemE"],
+    });
+    assert.deepEqual(result.fields["field:Flag"], {
+        groups: [["ItemC", "ItemD"]],
+        missing: ["ItemA", "ItemB", "ItemE"],
+    });
+    assert.deepEqual(result.duplicateNames, []);
+    assert.deepEqual(compareItems([], ["password"]), { itemCount: 0, duplicateNames: [], fields: { password: { groups: [], missing: [] } } });
+    assert.deepEqual(compareItems([compareSource[0]], ["password"]), { itemCount: 1, duplicateNames: [], fields: { password: { groups: [], missing: [] } } });
+});
+
+test("照合の対象に同名の項目があると、その名前を duplicateNames で示す", () => {
+    const login = (id, name, password) => ({ id, name, type: 1, login: { password } });
+    const result = compareItems(
+        [login("d1", "Svc-Token-B", "x"), login("d2", "Svc-Token-A", "x"), login("d3", "Svc-Token-B", "y"), login("d4", "Svc-Token-A", "x"), login("d5", "Svc-Token-B", "z")],
+        ["password"],
+    );
+    assert.deepEqual(result.duplicateNames, ["Svc-Token-A", "Svc-Token-B"]);
+    // 同名の項目同士の一致は、groups では同じ名前の並びとしてしか表せない。duplicateNames はその判別のために返す。
+    assert.deepEqual(result.fields.password.groups, [["Svc-Token-A", "Svc-Token-A", "Svc-Token-B"]]);
+});
+
+test("照合とメモの対象指定は名前・検索語・全件を解決し、ゴミ箱を除く", () => {
+    assert.deepEqual(selectItems(items, { names: ["GitHub-Token-ClaudeDesktopMCP"] }).map((item) => item.id), ["1"]);
+    assert.deepEqual(selectItems(items, { search: "token" }).map((item) => item.name), [
+        "GitHub-Token-ClaudeDesktopMCP",
+        "Dup-Token-A",
+        "Dup-Token-A",
+    ]);
+    assert.equal(selectItems(items, { all: true }).length, 5);
+    assert.throws(() => selectItems(items, {}), /Give --item, --search, or --all/);
+    assert.throws(() => selectItems(items, { names: ["GitHub-Token-ClaudeDesktopMCP"] }, { minNamed: 2 }), /at least two --item/);
+    assert.throws(() => selectItems(items, { names: ["GitHub-Token-ClaudeDesktopMCP", "GitHub-Token-ClaudeDesktopMCP"] }, { minNamed: 2 }), /more than once/);
 });
 
 test("メモとテキストのフィールドが空の項目だけを承認なしで返せる", () => {
@@ -282,11 +504,37 @@ test("任意のコマンドは引数の配列で受け取る", () => {
     assert.throws(() => buildArbitraryCommand([""]), /empty/);
 });
 
-test("生成する長さを制限する", () => {
-    assert.deepEqual(generateArgs(32, false), ["generate", "-uln", "--length", "32"]);
-    assert.deepEqual(generateArgs("64", true), ["generate", "-ulns", "--length", "64"]);
+test("生成するパスワードとパスフレーズのオプションを検証する", () => {
+    assert.deepEqual(generateArgs(), ["generate", "-uln", "--length", "32"]);
+    assert.deepEqual(generateArgs({ length: 32, special: false }), ["generate", "-uln", "--length", "32"]);
+    assert.deepEqual(generateArgs({ length: "64", special: true }), ["generate", "-ulns", "--length", "64"]);
+    assert.deepEqual(generateArgs({ uppercase: false, number: false, special: true }), ["generate", "-ls", "--minNumber", "0", "--length", "32"]);
+    assert.throws(() => generateArgs({ uppercase: false, lowercase: false, number: false, special: false }), /at least one character set/);
     for (const length of [15, 129, "abc", 20.5]) {
-        assert.throws(() => generateArgs(length, false), /Length/, String(length));
+        assert.throws(() => generateArgs({ length, special: false }), /Length/, String(length));
+    }
+
+    assert.deepEqual(generateArgs({ passphrase: true }), ["generate", "--passphrase", "--words", "4", "--separator", "-"]);
+    assert.deepEqual(generateArgs({
+        passphrase: true,
+        words: "6",
+        separator: "_",
+        capitalize: true,
+        includeNumber: true,
+    }), ["generate", "--passphrase", "--words", "6", "--separator", "_", "--capitalize", "--includeNumber"]);
+    assert.deepEqual(generateArgs({ passphrase: true, words: 3 }), ["generate", "--passphrase", "--words", "3", "--separator", "-"]);
+    assert.deepEqual(generateArgs({ passphrase: true, words: 20 }), ["generate", "--passphrase", "--words", "20", "--separator", "-"]);
+    for (const words of [2, 21, 4.5, "abc"]) {
+        assert.throws(() => generateArgs({ passphrase: true, words }), /Words/, String(words));
+    }
+    for (const separator of ["", "--", " ", "\t", "\n", "\u00a0", "\u001b"]) {
+        assert.throws(() => generateArgs({ passphrase: true, separator }), /Separator/, JSON.stringify(separator));
+    }
+    for (const option of [{ words: 4 }, { separator: "_" }, { capitalize: true }, { includeNumber: true }]) {
+        assert.throws(() => generateArgs(option), /require --passphrase/);
+    }
+    for (const option of [{ length: 32 }, { uppercase: false }, { lowercase: true }, { number: false }, { special: true }]) {
+        assert.throws(() => generateArgs({ passphrase: true, ...option }), /cannot be used with --passphrase/);
     }
 });
 
@@ -337,3 +585,24 @@ test("画面へ表示する文字列から端末の制御と書式制御の文�
     assert.equal(output.split("\n").length, 3);
     assert.ok(!/[\p{Cc}\p{Cf}]/u.test(output.replaceAll("\n", "")));
 });
+
+test("端末の表示幅は半角文字を 1、全角文字と絵文字を 2 と数える", () => {
+    assert.equal(charDisplayWidth(""), 0);
+    // © と ☺ は既定で文字として表示されるため、絵文字の符号位置の近くにあっても 1 桁幅である。
+    for (const ch of ["a", "1", "-", "ｱ", "©", "☺"]) {
+        assert.equal(charDisplayWidth(ch), 1, ch);
+    }
+    for (const ch of ["あ", "漢", "！", "　", "한", "🔑", "✅", "⌚", "🀄", "🫠"]) {
+        assert.equal(charDisplayWidth(ch), 2, ch);
+    }
+});
+
+test("generate で --x と --no-x を同時に指定すると拒否する", async () => {
+    for (const name of ["uppercase", "lowercase", "number"]) {
+        await assert.rejects(
+            run(["generate", "--name", "Svc-Token-Test", `--${name}`, `--no-${name}`, "--reason", "test"]),
+            new RegExp(`either --${name} or --no-${name}`),
+        );
+    }
+});
+

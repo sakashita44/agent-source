@@ -5,7 +5,7 @@ import { request } from "node:http";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { clientName, idleMinutes, isProcessAlive, listDetails, readState } from "./vault-core.mjs";
+import { clientName, compareFields, idleMinutes, isProcessAlive, listDetails, readState } from "./vault-core.mjs";
 
 const START_WAIT_MS = 90 * 1000;
 const POLL_INTERVAL_MS = 2000;
@@ -15,7 +15,8 @@ const USAGE = [
     "Usage (every command accepts --client <name>: the name the user gave the agent, or its product name such as Claude Code):",
     "  bw-vault.mjs start [--idle-minutes <15-720>]",
     "  bw-vault.mjs status",
-    "  bw-vault.mjs list [--search <text>] [--with uris,username,dates,fields,flags,sshKey]",
+    "  bw-vault.mjs list [--search <text>] [--with uris,username,dates,fields,flags,sshKey,card,passkeys]",
+    "  bw-vault.mjs compare --field <fields> (--item <name> [--item <name>...] | --search <text> | --all)",
     "  bw-vault.mjs notes (--item <name> [--item <name>...] | --search <text> | --all) --reason <text>",
     "  bw-vault.mjs edit --item <name> [--rename <name>] [--notes <text> | --append-notes <text>] [--uris <json>] [--username <name>] [--folder <folder> | --no-folder] --reason <text>",
     "  bw-vault.mjs move --item <name> [--item <name>...] (--folder <folder> | --no-folder) --reason <text>",
@@ -25,7 +26,8 @@ const USAGE = [
     "  bw-vault.mjs send gh-secret --item <name> --repo <owner/name> --name <SECRET_NAME> [--env <environment>] --reason <text>",
     "  bw-vault.mjs send ssh-sudo --item <name> --host <host> [--ssh <C:\\...\\ssh.exe>] --reason <text>",
     "  bw-vault.mjs send command --item <name> --reason <text> -- <command> [args...]",
-    "  bw-vault.mjs generate --name <name> [--folder <folder>] [--username <name>] [--uris <json>] [--notes <text>] [--length <16-128>] [--special] --reason <text>",
+    "  bw-vault.mjs generate --name <name> [--folder <folder>] [--username <name>] [--uris <json>] [--notes <text>] [--length <16-128>] [--uppercase | --no-uppercase] [--lowercase | --no-lowercase] [--number | --no-number] [--special] --reason <text>",
+    "  bw-vault.mjs generate --name <name> [--folder <folder>] [--username <name>] [--uris <json>] [--notes <text>] --passphrase [--words <3-20>] [--separator <char>] [--capitalize] [--include-number] --reason <text>",
     "  bw-vault.mjs stop",
 ].join("\n");
 
@@ -196,6 +198,15 @@ function singleItem(items) {
     return items[0];
 }
 
+function toggleOption(values, name) {
+    const positive = values[name];
+    const negative = values[`no-${name}`];
+    if (positive !== undefined && negative !== undefined) {
+        throw new Error(`Give either --${name} or --no-${name}, not both.\n${USAGE}`);
+    }
+    return negative === true ? false : positive;
+}
+
 function parse(argv) {
     let parsed;
     try {
@@ -205,6 +216,7 @@ function parse(argv) {
             options: {
                 search: { type: "string" },
                 with: { type: "string" },
+                field: { type: "string", multiple: true },
                 all: { type: "boolean" },
                 item: { type: "string", multiple: true },
                 rename: { type: "string" },
@@ -221,7 +233,18 @@ function parse(argv) {
                 "no-folder": { type: "boolean" },
                 username: { type: "string" },
                 length: { type: "string" },
+                uppercase: { type: "boolean" },
+                "no-uppercase": { type: "boolean" },
+                lowercase: { type: "boolean" },
+                "no-lowercase": { type: "boolean" },
+                number: { type: "boolean" },
+                "no-number": { type: "boolean" },
                 special: { type: "boolean" },
+                passphrase: { type: "boolean" },
+                words: { type: "string" },
+                separator: { type: "string" },
+                capitalize: { type: "boolean" },
+                "include-number": { type: "boolean" },
                 reason: { type: "string" },
                 client: { type: "string" },
                 "idle-minutes": { type: "string" },
@@ -247,6 +270,14 @@ export async function run(argv) {
             return { ...(await brokerStatus()), bitwarden: bitwardenStatus() };
         case "list":
             return callBroker("/list", { search: values.search, details: listDetails(values.with).join(","), client });
+        case "compare":
+            return callBroker("/compare", {
+                items: values.item,
+                search: values.search,
+                all: values.all,
+                field: compareFields(values.field),
+                client,
+            });
         case "notes":
             return callBroker("/notes", { items: values.item, search: values.search, all: values.all, reason: values.reason, client });
         case "edit":
@@ -283,8 +314,16 @@ export async function run(argv) {
                 username: values.username,
                 uris: values.uris,
                 notes: values.notes,
-                length: values.length ?? 32,
-                special: values.special ?? false,
+                length: values.length,
+                uppercase: toggleOption(values, "uppercase"),
+                lowercase: toggleOption(values, "lowercase"),
+                number: toggleOption(values, "number"),
+                special: values.special,
+                passphrase: values.passphrase,
+                words: values.words,
+                separator: values.separator,
+                capitalize: values.capitalize,
+                includeNumber: values["include-number"],
                 reason: values.reason,
                 client,
             });
