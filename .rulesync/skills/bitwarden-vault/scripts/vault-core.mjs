@@ -12,11 +12,12 @@ const ITEM_TYPES = { 1: "login", 2: "note", 3: "card", 4: "identity", 5: "sshKey
 // Bitwarden のカスタムフィールドの種別（FieldType）と、URI の自動入力の判定方法（UriMatchType）を表す数値。null はアプリの既定の判定方法に従うことを示す。
 const FIELD_TYPES = { 0: "text", 1: "hidden", 2: "boolean", 3: "linked" };
 const URI_MATCHES = { default: null, domain: 0, host: 1, startsWith: 2, exact: 3, regex: 4, never: 5 };
-const LIST_DETAILS = ["uris", "username", "dates", "fields", "flags", "sshKey"];
+const LIST_DETAILS = ["uris", "username", "dates", "fields", "flags", "sshKey", "card", "passkeys"];
+const COMPARE_FIELDS = ["password", "totp", "card.number", "notes"];
 // bw report password-health の出力のうち、エージェントに返す項目。CLI の版によって出力に情報が増えても返さないよう、許可した項目に限る。
 const HEALTH_FIELDS = ["name", "passwordStrength", "reuseCount"];
 const EXPOSURE_FIELDS = ["exposed", "exposedCount", "exposedError"];
-const ITEM_NAME_PATTERN = /^[A-Za-z0-9]+(?:[A-Za-z0-9.]*)-(?:Token|Account|KeyPair)-[A-Za-z0-9][A-Za-z0-9._-]*$/;
+const ITEM_NAME_PATTERN = /^[A-Za-z0-9]+(?:[A-Za-z0-9.]*)-(?:Token|Account|KeyPair|SymmetricKey)-[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const REPO_PATTERN = /^[A-Za-z0-9_][A-Za-z0-9_.-]*\/[A-Za-z0-9_][A-Za-z0-9_.-]*$/;
 const SECRET_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const ENVIRONMENT_PATTERN = /^[A-Za-z0-9_][A-Za-z0-9_.-]*$/;
@@ -29,10 +30,12 @@ const UNSAFE_DISPLAY_CHARACTERS = /[\p{Cc}\p{Cf}]/gu;
 const CLIENT_PATTERN = /^[\p{L}\p{N}][\p{L}\p{N} ._-]{0,39}$/u;
 const MIN_GENERATED_LENGTH = 16;
 const MAX_GENERATED_LENGTH = 128;
+const MIN_GENERATED_WORDS = 3;
+const MAX_GENERATED_WORDS = 20;
 
 export function assertItemName(name) {
     if (typeof name !== "string" || !ITEM_NAME_PATTERN.test(name)) {
-        throw new Error(`Item name does not follow the naming rule {Service}-{Token|Account|KeyPair}-{Label}: ${JSON.stringify(name)}`);
+        throw new Error(`Item name does not follow the naming rule {Service}-{Token|Account|KeyPair|SymmetricKey}-{Label}: ${JSON.stringify(name)}`);
     }
     return name;
 }
@@ -62,6 +65,28 @@ function matchName(match) {
     return name ?? `unknown(${match})`;
 }
 
+// 下 4 桁が番号の大半を占める短い値では番号そのものを返すことになるため、ISO/IEC 7812 のカード番号の最短桁数（8 桁）に満たない値や数字以外を含む値では返さない。
+const MIN_CARD_NUMBER_DIGITS = 8;
+
+function cardLast4(number) {
+    if (typeof number !== "string") {
+        return null;
+    }
+    const digits = number.replace(/[\s-]+/g, "");
+    return /^\d+$/.test(digits) && digits.length >= MIN_CARD_NUMBER_DIGITS ? digits.slice(-4) : null;
+}
+
+// Bitwarden の fido2Credentials では、discoverable が真偽値ではなく文字列（"true" / "false"）で格納される場合がある。
+function discoverableFlag(value) {
+    if (value === true || value === "true") {
+        return true;
+    }
+    if (value === false || value === "false") {
+        return false;
+    }
+    return null;
+}
+
 const DETAIL_BUILDERS = {
     uris: (item) => ({ uris: (item.login?.uris ?? []).map((uri) => ({ uri: uri.uri, match: matchName(uri.match) })) }),
     username: (item) => ({ username: item.login?.username ?? null }),
@@ -80,6 +105,27 @@ const DETAIL_BUILDERS = {
     // 秘密鍵（sshKey.privateKey）は返さず、公開鍵とフィンガープリントに限る。
     sshKey: (item) => ({
         sshKey: item.sshKey ? { publicKey: item.sshKey.publicKey ?? null, keyFingerprint: item.sshKey.keyFingerprint ?? null } : null,
+    }),
+    // カード番号の全桁（number）とセキュリティコード（code）は返さず、メタデータと下 4 桁に限る。
+    card: (item) => ({
+        card: item.card ? {
+            brand: item.card.brand ?? null,
+            cardholderName: item.card.cardholderName ?? null,
+            expMonth: item.card.expMonth ?? null,
+            expYear: item.card.expYear ?? null,
+            last4: cardLast4(item.card.number),
+        } : null,
+    }),
+    // fido2Credentials には秘密鍵（keyValue）や WebAuthn の識別子・署名カウンタ（credentialId, userHandle, counter）も含まれるため、公開属性に限って返す。
+    passkeys: (item) => ({
+        passkeys: (item.login?.fido2Credentials ?? []).map((cred) => ({
+            rpId: cred.rpId ?? null,
+            rpName: cred.rpName ?? null,
+            userName: cred.userName ?? null,
+            userDisplayName: cred.userDisplayName ?? null,
+            discoverable: discoverableFlag(cred.discoverable),
+            created: cred.creationDate ?? null,
+        })),
     }),
 };
 
@@ -211,6 +257,114 @@ export function findItemByName(items, name) {
     return matches[0];
 }
 
+export function matchesSearch(name, search) {
+    return typeof search !== "string" || search.length === 0 || name.toLowerCase().includes(search.toLowerCase());
+}
+
+export function assertItemSelection({ names, search, all }, { minNamed = 1 } = {}) {
+    if (Array.isArray(names) && names.length > 0) {
+        if (minNamed > 1) {
+            uniqueNames(names);
+            if (names.length < minNamed) {
+                throw new Error(`Give at least two --item values to compare.`);
+            }
+        }
+        return;
+    }
+    if (all === true || (typeof search === "string" && search.length > 0)) {
+        return;
+    }
+    throw new Error("Give --item, --search, or --all to choose the items.");
+}
+
+export function selectItems(items, { names, search, all }, options) {
+    assertItemSelection({ names, search, all }, options);
+    if (Array.isArray(names) && names.length > 0) {
+        return names.map((name) => findItemByName(items, name));
+    }
+    return items.filter((item) => !item.deletedDate && matchesSearch(item.name, search));
+}
+
+export function compareFields(value) {
+    if (value === undefined || value === null) {
+        throw new Error("Give at least one --field.");
+    }
+    const rawValues = Array.isArray(value) ? value : [value];
+    const fields = rawValues
+        .flatMap((entry) => String(entry).split(","))
+        .map((field) => field.trim())
+        .filter((field) => field.length > 0);
+    if (fields.length === 0) {
+        throw new Error("Give at least one --field.");
+    }
+    for (const field of fields) {
+        if (field.startsWith("field:")) {
+            if (field.slice("field:".length).length === 0) {
+                throw new Error('Custom field name after "field:" must not be empty.');
+            }
+            continue;
+        }
+        if (!COMPARE_FIELDS.includes(field)) {
+            throw new Error(`Unknown --field value: ${field}. Use ${COMPARE_FIELDS.join(", ")}, or field:<name>.`);
+        }
+    }
+    return [...new Set(fields)];
+}
+
+function extractCompareValue(item, field) {
+    if (field === "password") {
+        return nonEmpty(item.login?.password) ? item.login.password : null;
+    }
+    if (field === "totp") {
+        return nonEmpty(item.login?.totp) ? item.login.totp : null;
+    }
+    if (field === "card.number") {
+        if (typeof item.card?.number !== "string") {
+            return null;
+        }
+        const normalized = item.card.number.replace(/[\s-]+/g, "");
+        return normalized.length > 0 ? normalized : null;
+    }
+    if (field === "notes") {
+        return nonEmpty(item.notes) ? item.notes.replace(/\r\n/g, "\n") : null;
+    }
+    if (field.startsWith("field:")) {
+        const customName = field.slice("field:".length);
+        // Bitwarden は 1 つの項目に同名のカスタムフィールドを複数持てるため、値が空でない最初の項目を対象にする。
+        const match = (item.fields ?? []).find((entry) => entry.name === customName && nonEmpty(entry.value));
+        return match ? match.value : null;
+    }
+    throw new Error(`Unknown --field value: ${field}.`);
+}
+
+export function compareItems(items, fields) {
+    const resultFields = {};
+    for (const field of fields) {
+        const byValue = new Map();
+        const missing = [];
+        for (const item of items) {
+            const value = extractCompareValue(item, field);
+            if (value === null) {
+                missing.push(item.name);
+                continue;
+            }
+            const group = byValue.get(value) ?? [];
+            group.push(item.name);
+            byValue.set(value, group);
+        }
+        const groups = [...byValue.values()]
+            .filter((group) => group.length >= 2)
+            .map((group) => group.sort((a, b) => a.localeCompare(b)))
+            .sort((a, b) => a[0].localeCompare(b[0]));
+        missing.sort((a, b) => a.localeCompare(b));
+        resultFields[field] = { groups, missing };
+    }
+    // groups と missing は項目名で示すため、同名の項目が対象にあると別々の項目を区別できない。その名前を示し、利用者に改名を依頼できるようにする。
+    const duplicateNames = [...new Set(items.map((item) => item.name).filter((name, index, names) => names.indexOf(name) !== index))]
+        .sort((a, b) => a.localeCompare(b));
+    return { itemCount: items.length, duplicateNames, fields: resultFields };
+}
+
 export function passwordOf(item) {
     const password = item.login?.password;
     if (typeof password !== "string" || password.length === 0) {
@@ -297,12 +451,58 @@ export function buildArbitraryCommand(argv) {
     };
 }
 
-export function generateArgs(length, special) {
-    const parsed = Number(length);
-    if (!Number.isInteger(parsed) || parsed < MIN_GENERATED_LENGTH || parsed > MAX_GENERATED_LENGTH) {
+export function generateArgs({
+    length,
+    uppercase,
+    lowercase,
+    number,
+    special,
+    passphrase,
+    words,
+    separator,
+    capitalize,
+    includeNumber,
+} = {}) {
+    if (passphrase === true) {
+        // bw generate は --passphrase 指定時に --length や文字種フラグをエラーにせず無視するため、併用をここで拒否する。
+        if (length !== undefined || uppercase !== undefined || lowercase !== undefined || number !== undefined || special !== undefined) {
+            throw new Error("--length, --uppercase, --lowercase, --number, and --special cannot be used with --passphrase.");
+        }
+        const parsedWords = Number(words ?? 4);
+        // bw generate は --words が 3 未満でもエラーにせず 3 語へ丸めるため、範囲を事前に検証する。
+        if (!Number.isInteger(parsedWords) || parsedWords < MIN_GENERATED_WORDS || parsedWords > MAX_GENERATED_WORDS) {
+            throw new Error(`Words must be an integer from ${MIN_GENERATED_WORDS} to ${MAX_GENERATED_WORDS}.`);
+        }
+        const resolvedSeparator = separator ?? "-";
+        // bw generate の --separator は複数文字を渡すと先頭 1 文字だけを使い、"space" と "empty" を特殊値として解釈するため、1 文字に限る。
+        if (typeof resolvedSeparator !== "string" || Array.from(resolvedSeparator).length !== 1 || /[\s\p{Cc}\p{Cf}]/u.test(resolvedSeparator)) {
+            throw new Error("Separator must be a single non-whitespace character.");
+        }
+        return [
+            "generate",
+            "--passphrase",
+            "--words",
+            String(parsedWords),
+            "--separator",
+            resolvedSeparator,
+            ...(capitalize === true ? ["--capitalize"] : []),
+            ...(includeNumber === true ? ["--includeNumber"] : []),
+        ];
+    }
+    if (words !== undefined || separator !== undefined || capitalize === true || includeNumber === true) {
+        throw new Error("--words, --separator, --capitalize, and --include-number require --passphrase.");
+    }
+    const parsedLength = Number(length ?? 32);
+    if (!Number.isInteger(parsedLength) || parsedLength < MIN_GENERATED_LENGTH || parsedLength > MAX_GENERATED_LENGTH) {
         throw new Error(`Length must be an integer from ${MIN_GENERATED_LENGTH} to ${MAX_GENERATED_LENGTH}.`);
     }
-    return ["generate", special ? "-ulns" : "-uln", "--length", String(parsed)];
+    const useNumber = number ?? true;
+    const flags = `${(uppercase ?? true) ? "u" : ""}${(lowercase ?? true) ? "l" : ""}${useNumber ? "n" : ""}${(special ?? false) ? "s" : ""}`;
+    if (flags.length === 0) {
+        throw new Error("Enable at least one character set (--uppercase, --lowercase, --number, or --special).");
+    }
+    // bw generate は -n を省いても数字の最小文字数（--minNumber）の既定値 1 により数字を含めるため、数字を除く場合は 0 を明示する。
+    return ["generate", `-${flags}`, ...(useNumber ? [] : ["--minNumber", "0"]), "--length", String(parsedLength)];
 }
 
 export function buildLoginItem({ name, folderId, username, uris = [], notes, password }) {
@@ -441,6 +641,35 @@ export function displaySafe(text) {
 // 制御文字 (Cc) には改行も含まれるため、行に分けてから無害化し、改行だけを残す。
 export function displaySafeOutput(text) {
     return String(text).replace(/\r\n/g, "\n").split("\n").map(displaySafe).join("\n");
+}
+
+// 端末の raw mode で Backspace の消去幅を合わせるため、Unicode の East Asian Width (Wide/Fullwidth) と、既定で絵文字として表示される文字（Emoji_Presentation）を 2 桁幅と判定する。
+export function charDisplayWidth(char) {
+    const cp = char.codePointAt(0);
+    if (cp === undefined) {
+        return 0;
+    }
+    if (/^\p{Emoji_Presentation}/u.test(char)) {
+        return 2;
+    }
+    if (
+        (cp >= 0x1100 && cp <= 0x115f)
+        || cp === 0x2329
+        || cp === 0x232a
+        || (cp >= 0x2e80 && cp <= 0x303e)
+        || (cp >= 0x3040 && cp <= 0xa4cf)
+        || (cp >= 0xac00 && cp <= 0xd7a3)
+        || (cp >= 0xf900 && cp <= 0xfaff)
+        || (cp >= 0xfe10 && cp <= 0xfe19)
+        || (cp >= 0xfe30 && cp <= 0xfe6f)
+        || (cp >= 0xff01 && cp <= 0xff60)
+        || (cp >= 0xffe0 && cp <= 0xffe6)
+        || (cp >= 0x20000 && cp <= 0x2fffd)
+        || (cp >= 0x30000 && cp <= 0x3fffd)
+    ) {
+        return 2;
+    }
+    return 1;
 }
 
 export function readState() {

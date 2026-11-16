@@ -10,14 +10,18 @@ import {
     STATE_FILE,
     applyEdit,
     assertItemName,
+    assertItemSelection,
     assertNewFolderName,
     assertReason,
     buildArbitraryCommand,
     buildFixedCommand,
     buildLoginItem,
     changedItems,
+    charDisplayWidth,
     canConnect,
     clientName,
+    compareFields,
+    compareItems,
     describeUris,
     displaySafe,
     displaySafeOutput,
@@ -29,12 +33,14 @@ import {
     idleMinutes,
     isProcessAlive,
     listDetails,
+    matchesSearch,
     needsNoteApproval,
     noteContents,
     parseUris,
     partitionMove,
     passwordOf,
     readState,
+    selectItems,
     summarizeHealth,
     summarizeFolders,
     summarizeItems,
@@ -150,9 +156,11 @@ function readLine(prompt, signal) {
                     return;
                 }
                 if (char === "\b" || char === "\u007f") {
-                    if (value.length > 0) {
-                        value = value.slice(0, -1);
-                        process.stdout.write("\b \b");
+                    const chars = Array.from(value);
+                    const removed = chars.pop();
+                    if (removed !== undefined) {
+                        value = chars.join("");
+                        process.stdout.write("\b \b".repeat(charDisplayWidth(removed)));
                     }
                 } else if (!/[\p{Cc}\p{Cf}]/u.test(char)) {
                     value += char;
@@ -224,7 +232,7 @@ async function track(work) {
 
 function cancelRequest() {
     say(CANCELLED_MESSAGE);
-    return { approved: false, cancelled: true };
+    return { approved: false, cancelled: true, reason: null };
 }
 
 async function confirm(question, signal, { strict = false, rememberable = false } = {}) {
@@ -244,18 +252,32 @@ async function confirm(question, signal, { strict = false, rememberable = false 
     const answer = await readLine("> ", signal);
     if (answer === null || signal.aborted) {
         say("", CANCELLED_MESSAGE);
-        return { approved: false, cancelled: true };
+        return { approved: false, cancelled: true, reason: null };
     }
     resetIdleTimer();
     const remember = rememberable && answer.toLowerCase() === "a";
     const approved = strict ? answer === "yes" : remember || /^y(es)?$/i.test(answer);
-    say("");
-    if (!approved) {
-        say("実行しませんでした。");
-    } else if (remember) {
-        say("承認しました。このウィンドウを閉じるまで、同じ項目と送信先の組み合わせは自動で承認されます。");
+    if (approved) {
+        say("");
+        if (remember) {
+            say("承認しました。このウィンドウを閉じるまで、同じ項目と送信先の組み合わせは自動で承認されます。");
+        }
+        return { approved: true, remember, cancelled: false, reason: null };
     }
-    return { approved, remember, cancelled: false };
+    say("", "実行しませんでした。");
+    // 拒否の回答の直後に端末から届く改行の残りなどで理由の入力が閉じないよう、理由の入力にも先行入力の無視を適用する。
+    const rawReason = await readLine("理由 (任意、Enter で省略)> ", signal);
+    if (rawReason === null || signal.aborted) {
+        say("", CANCELLED_MESSAGE);
+        return { approved: false, cancelled: true, reason: null };
+    }
+    resetIdleTimer();
+    const formatted = displaySafe(rawReason).trim();
+    const reason = formatted.length > 0 ? formatted : null;
+    if (reason !== null) {
+        say(`理由: ${reason}`);
+    }
+    return { approved: false, remember: false, cancelled: false, reason };
 }
 
 function runWithSecret({ file, args, appendNewline }, secret) {
@@ -305,11 +327,9 @@ const DETAIL_LABELS = {
     fields: "カスタムフィールドの名前と種別",
     flags: "メモと TOTP の有無などの設定",
     sshKey: "SSH キーの公開鍵とフィンガープリント",
+    card: "カードのブランド・名義人・有効期限・下 4 桁",
+    passkeys: "パスキーの登録情報",
 };
-
-function matchesSearch(name, search) {
-    return typeof search !== "string" || search.length === 0 || name.toLowerCase().includes(search.toLowerCase());
-}
 
 async function handleList({ search, details, client }) {
     const requested = listDetails(details);
@@ -321,14 +341,18 @@ async function handleList({ search, details, client }) {
     return { items: summaries };
 }
 
-function selectItems(items, { names, search, all }) {
-    if (Array.isArray(names) && names.length > 0) {
-        return names.map((name) => findItemByName(items, name));
-    }
-    if (all === true || (typeof search === "string" && search.length > 0)) {
-        return items.filter((item) => !item.deletedDate && matchesSearch(item.name, search));
-    }
-    throw new Error("Give --item, --search, or --all to choose the items.");
+async function handleCompare({ items: names, search, all, field, client }) {
+    const fields = compareFields(field);
+    assertItemSelection({ names, search, all }, { minNamed: 2 });
+    const { items } = await loadVault();
+    const selected = selectItems(items, { names, search, all }, { minNamed: 2 });
+    const result = compareItems(selected, fields);
+    say(
+        `項目 ${result.itemCount} 件の ${fields.join("、")} を照合し、結果を ${clientName(client)} に返しました。秘密値を含まないため、承認なしで実行しました。`,
+        ...fields.map((name) => `  ${name}: 一致グループ ${result.fields[name].groups.length} 件、未設定 ${result.fields[name].missing.length} 件`),
+        ...(result.duplicateNames.length > 0 ? [`  同名の項目: ${result.duplicateNames.join("、")}`] : []),
+    );
+    return result;
 }
 
 function showContents(contents) {
@@ -382,12 +406,12 @@ async function handleNotes({ items: names, search, all, reason, client }, signal
         `  ${strict ? "yes" : "y"}: 表示した内容と、空の項目の結果を渡す`,
         `  ${strict ? "それ以外" : "N"}: どの項目の内容も ${requester} に渡さない${strict ? "" : " (既定)"}`,
     );
-    const { approved, cancelled } = await confirm(`この内容を ${requester} に渡しますか？`, signal, { strict });
+    const { approved, cancelled, reason: rejectionReason } = await confirm(`この内容を ${requester} に渡しますか？`, signal, { strict });
     if (!approved) {
         if (!cancelled) {
             say(`どの項目の内容も ${requester} に渡していません。`);
         }
-        return { approved: false, cancelled };
+        return { approved: false, cancelled, reason: rejectionReason };
     }
     if (signal.aborted) {
         return cancelRequest();
@@ -444,9 +468,9 @@ async function handleEdit({ item: itemName, rename, notes, appendNotes, uris, us
         sayBlock("フォルダ (変更前)", [folderLabel(folders, item.folderId)]);
         sayBlock("フォルダ (変更後)", [folderLabel(folders, folderId)]);
     }
-    const { approved, cancelled } = await confirm(`項目 ${item.name} をこの内容で変更しますか？`, signal);
+    const { approved, cancelled, reason: rejectionReason } = await confirm(`項目 ${item.name} をこの内容で変更しますか？`, signal);
     if (!approved) {
-        return { approved: false, cancelled };
+        return { approved: false, cancelled, reason: rejectionReason };
     }
     if (signal.aborted) {
         return cancelRequest();
@@ -515,9 +539,9 @@ async function handleSend({ item: itemName, target, options = {}, command, reaso
     if (approvalKey !== null && rememberedApprovals.has(approvalKey)) {
         say("", "この項目と送信先の組み合わせは承認済みのため、自動で承認しました。");
     } else {
-        const { approved, remember, cancelled } = await confirm(plan.question, signal, { strict: arbitrary, rememberable: !arbitrary });
+        const { approved, remember, cancelled, reason: rejectionReason } = await confirm(plan.question, signal, { strict: arbitrary, rememberable: !arbitrary });
         if (!approved) {
-            return { approved: false, cancelled };
+            return { approved: false, cancelled, reason: rejectionReason };
         }
         if (remember) {
             rememberedApprovals.add(approvalKey);
@@ -536,10 +560,28 @@ async function handleSend({ item: itemName, target, options = {}, command, reaso
     return { approved: true, exitCode };
 }
 
-async function handleGenerate({ name, folder, username, uris, notes, length = 32, special = false, reason, client }, signal) {
+async function handleGenerate({
+    name,
+    folder,
+    username,
+    uris,
+    notes,
+    length,
+    uppercase,
+    lowercase,
+    number,
+    special,
+    passphrase,
+    words,
+    separator,
+    capitalize,
+    includeNumber,
+    reason,
+    client,
+}, signal) {
     const explanation = assertReason(reason);
     assertItemName(name);
-    const args = generateArgs(length, special);
+    const args = generateArgs({ length, uppercase, lowercase, number, special, passphrase, words, separator, capitalize, includeNumber });
     const parsedUris = uris === undefined ? [] : parseUris(uris);
     const { items, folders } = await loadVault();
     if (signal.aborted) {
@@ -563,9 +605,9 @@ async function handleGenerate({ name, folder, username, uris, notes, length = 32
     if (typeof notes === "string" && notes.length > 0) {
         sayBlock("メモ", notesLines(notes));
     }
-    const { approved, cancelled } = await confirm(`新しい項目 ${name} を作成し、生成した値を保存しますか？`, signal);
+    const { approved, cancelled, reason: rejectionReason } = await confirm(`新しい項目 ${name} を作成し、生成した値を保存しますか？`, signal);
     if (!approved) {
-        return { approved: false, cancelled };
+        return { approved: false, cancelled, reason: rejectionReason };
     }
     if (signal.aborted) {
         return cancelRequest();
@@ -598,9 +640,9 @@ async function handleFolderCreate({ name, reason, client }, signal) {
     const folderName = assertNewFolderName(folders, name);
 
     sayDetails([["作成するフォルダ", folderName], [`${clientName(client)} の説明`, explanation]]);
-    const { approved, cancelled } = await confirm(`フォルダ ${folderName} を作成しますか？`, signal);
+    const { approved, cancelled, reason: rejectionReason } = await confirm(`フォルダ ${folderName} を作成しますか？`, signal);
     if (!approved) {
-        return { approved: false, cancelled };
+        return { approved: false, cancelled, reason: rejectionReason };
     }
     if (signal.aborted) {
         return cancelRequest();
@@ -645,9 +687,9 @@ async function handleMove({ items: names, folder, noFolder, reason, client }, si
     if (targets.length === 0) {
         return { approved: true, moved: [], unchanged };
     }
-    const { approved, cancelled } = await confirm(`${targets.length} 件の項目をフォルダ ${destination} へ移動しますか？`, signal);
+    const { approved, cancelled, reason: rejectionReason } = await confirm(`${targets.length} 件の項目をフォルダ ${destination} へ移動しますか？`, signal);
     if (!approved) {
-        return { approved: false, cancelled };
+        return { approved: false, cancelled, reason: rejectionReason };
     }
     if (signal.aborted) {
         return cancelRequest();
@@ -682,6 +724,7 @@ async function handleMove({ items: names, folder, noFolder, reason, client }, si
 const ROUTES = {
     "/status": async () => ({ unlocked: true, idleTimeoutMinutes: idleLimitMinutes }),
     "/list": handleList,
+    "/compare": handleCompare,
     "/folders": handleFolders,
     "/send": handleSend,
     "/generate": handleGenerate,
@@ -698,6 +741,7 @@ const ROUTES = {
 
 const ROUTE_TITLES = {
     "/list": "項目一覧の取得リクエスト",
+    "/compare": "秘密値の一致照合リクエスト",
     "/send": "秘密値の送信リクエスト",
     "/generate": "秘密値の生成・保存リクエスト",
     "/notes": "メモとフィールドの値の読み取りリクエスト",
@@ -798,7 +842,7 @@ function handleRequest(request, response, port) {
         (result) => respond(response, 200, { ok: true, ...result }),
         (error) => {
             if (signal.aborted) {
-                respond(response, 200, { ok: true, approved: false, cancelled: true });
+                respond(response, 200, { ok: true, approved: false, cancelled: true, reason: null });
                 return;
             }
             say(`リクエストを処理できませんでした。理由: ${error.message}`);
