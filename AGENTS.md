@@ -16,11 +16,11 @@
 - `./scripts/apply.ps1`: 利用中のホームディレクトリへ配布内容を生成し、hook スクリプトを `~/.local/agent-source/hooks/` へ配置する
 - `./scripts/verify.ps1`: `tmp/home` に隔離したホームディレクトリを生成し、利用中のホームディレクトリを変更せずに挙動を確認する
 
-利用中のホームディレクトリへ適用する前に、dry-run で差分が意図した配布内容のみであることを確認のこと。
+利用中のホームディレクトリへ適用する前に、dry-run で差分が意図した配布内容のみであることを確認のこと。一部のエージェントは実行時の環境変数を上書きするため、利用中のホームディレクトリへの適用（`./scripts/apply.ps1`）はエージェント内から実行しないこと。
 
-Rulesync の生成処理は、生成元から削除されたファイルを生成先から削除しない。`--delete` は、claude.ai から同期した Skill やデスクトップアプリの定期タスクなど、Rulesync 以外が配置したファイルも削除するため、`rulesync generate` に `--delete` を指定しないこと。Skill、サブエージェント定義、hook スクリプトを削除または改名した場合は、[README.md の「生成元から外した生成物の削除」](README.md#生成元から外した生成物の削除)の手順に従い、旧名の生成物を手作業で削除する。
+Rulesync の生成処理は、生成元から削除されたファイルを生成先から削除しない。`--delete` は、claude.ai から同期した Skill や Claude デスクトップアプリの定期タスクなど、Rulesync 以外が配置したファイルも削除するため、`rulesync generate` に `--delete` を指定しないこと。Skill、サブエージェント定義、hook スクリプトを削除または改名した場合は、[保守手順の「生成元から外した生成物の削除」](docs/maintenance.md#生成元から外した生成物の削除)に従い、旧名の生成物を手作業で削除する。
 
-Rulesync の版を変更すると、配布内容を変更していない場合でも生成結果が変わる。版を変更する場合は、[README.md の「Rulesync の更新」](README.md#rulesync-の更新)の手順に従って生成差分を確認すること。
+Rulesync のバージョンを変更すると、配布内容を変更していない場合でも生成結果が変わる。バージョンを変更する場合は、[保守手順の「Rulesync の更新」](docs/maintenance.md#rulesync-の更新)に従って生成差分を確認すること。
 
 Rulesync が配布するのは hook の設定ファイルのみであり、hook から呼び出すスクリプトの実体は `scripts/apply.ps1` が `~/.local/agent-source/hooks/` へ配置する。`hooks/` 配下を変更した場合、生成の実行だけでは実環境へ反映されない。Windows で hook を bash 以外のシェルで実行する配布先には Windows 専用コマンドを定義し、PATH 上の `bash` が Git Bash を指す前提としない。
 

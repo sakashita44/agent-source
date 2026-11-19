@@ -893,8 +893,8 @@ function lockAndClose(reason) {
         const result = spawnSync("bw", ["lock"], { env: bwEnv(), stdio: "ignore", windowsHide: true });
         session = null;
         say(result.status === 0
-            ? `${reason}、金庫をロックしました。`
-            : `${reason}、終了します。ただし、金庫をロックできませんでした (bw lock が失敗しました)。ターミナルで bw lock を実行してください。`);
+            ? `${reason}、保管庫をロックしました。`
+            : `${reason}、終了します。ただし、保管庫をロックできませんでした (bw lock が失敗しました)。ターミナルで bw lock を実行してください。`);
     } else {
         say(`${reason}、終了します。`);
     }
@@ -917,7 +917,7 @@ function shutdown(reason, { immediate = false } = {}) {
         lockAndClose(reason);
         return;
     }
-    say("実行中の処理が終わってから、金庫をロックして終了します。");
+    say("実行中の処理が終わってから、保管庫をロックして終了します。");
     activeWork.then(() => lockAndClose(reason));
 }
 
@@ -925,7 +925,7 @@ async function unlock() {
     const status = JSON.parse(await checkedBw(["status"]));
     if (status.status === "unauthenticated") {
         say(
-            "Bitwarden にログインしていないため、金庫のロックを解除できません。",
+            "Bitwarden にログインしていないため、保管庫のロックを解除できません。",
             "ターミナルで bw login を実行してから、このウィンドウをもう一度起動してください。",
         );
         return false;
@@ -940,7 +940,7 @@ async function unlock() {
             session = result.stdout.trim();
             return true;
         }
-        say(`金庫のロックを解除できませんでした (${attempt}/${MAX_UNLOCK_ATTEMPTS} 回目)。マスターパスワードが正しいか確認してください。`, "");
+        say(`保管庫のロックを解除できませんでした (${attempt}/${MAX_UNLOCK_ATTEMPTS} 回目)。マスターパスワードが正しいか確認してください。`, "");
     }
     say(`${MAX_UNLOCK_ATTEMPTS} 回続けてロックを解除できなかったため、終了します。`);
     return false;
@@ -955,13 +955,13 @@ async function main() {
     process.title = "bitwarden-vault";
     say(
         `${clientName(process.argv[2])} がこのウィンドウを起動しました。`,
-        "このウィンドウで、Bitwarden の金庫のロック解除と、秘密値の送信や保存、項目の内容の読み取りや変更の承認を行います。",
+        "このウィンドウで、Bitwarden の保管庫のロック解除と、秘密値の送信や保存、項目の内容の読み取りや変更の承認を行います。",
         "",
     );
     idleLimitMinutes = idleMinutes(process.argv[3]);
     if (idleLimitMinutes !== DEFAULT_IDLE_MINUTES) {
         say(
-            `注意: 利用者の指示により、このウィンドウは ${idleLimitMinutes} 分間操作がなければ金庫をロックします (既定は ${DEFAULT_IDLE_MINUTES} 分)。`,
+            `注意: 利用者の指示により、このウィンドウは ${idleLimitMinutes} 分間操作がなければ保管庫をロックします (既定は ${DEFAULT_IDLE_MINUTES} 分)。`,
             "心当たりがない場合は、マスターパスワードを入力せずにこのウィンドウを閉じてください。",
             "",
         );
@@ -987,8 +987,8 @@ async function main() {
     resetIdleTimer();
     say(
         "",
-        "金庫のロックを解除しました。リクエストを待っています。",
-        `${idleLimitMinutes} 分間操作がない場合は、金庫がロックされ、このウィンドウが閉じます。このウィンドウを閉じた場合も、金庫がロックされます。`,
+        "保管庫のロックを解除しました。リクエストを待っています。",
+        `${idleLimitMinutes} 分間操作がない場合は、保管庫がロックされ、このウィンドウが閉じます。このウィンドウを閉じた場合も、保管庫がロックされます。`,
     );
 }
 
