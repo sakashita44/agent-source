@@ -42,7 +42,7 @@ Windows 上の作業では、WSL へツールを直接導入しない。WSL で�
 - 設計、実装、レビュー、技術的な提案では、コード、ルール、設定、Skill、形式定義など手段を問わず `engineering-principles` を必ず適用する
 - 情報と意図を成果物へ配置するときは `artifact-principles` を必ず適用する
 - 文書、Issue、PR description、技術メモ、コードコメント、コミットメッセージなど残存する文章を執筆、編集、レビューするときは `writing-principles` を必ず適用する
-- 変更、既存成果物、文書、手順、コードの検証と完了判定では `verification-principles` を必ず適用する
+- 変更、既存成果物、文書、手順、コードに対するテスト設計、検証、完了判定では `verification-principles` を必ず適用する
 - Git の参照や操作をするとき、または Git 操作を提案するときは `git-general` を必ず適用する
 - サブエージェントへ委譲するときは `subagent` を必ず適用する
 - 特定のプラットフォームや実行基盤を対象に開発し、方式を選ぶときは `stack-conventions` を必ず適用する
