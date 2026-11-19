@@ -14,7 +14,7 @@ const FIELD_TYPES = { 0: "text", 1: "hidden", 2: "boolean", 3: "linked" };
 const URI_MATCHES = { default: null, domain: 0, host: 1, startsWith: 2, exact: 3, regex: 4, never: 5 };
 const LIST_DETAILS = ["uris", "username", "dates", "fields", "flags", "sshKey", "card", "passkeys"];
 const COMPARE_FIELDS = ["password", "totp", "card.number", "notes"];
-// bw report password-health の出力のうち、エージェントに返す項目。CLI の版によって出力に情報が増えても返さないよう、許可した項目に限る。
+// bw report password-health の出力のうち、エージェントに返す項目。CLI のバージョンによって出力に情報が増えても返さないよう、許可した項目に限る。
 const HEALTH_FIELDS = ["name", "passwordStrength", "reuseCount"];
 const EXPOSURE_FIELDS = ["exposed", "exposedCount", "exposedError"];
 const ITEM_NAME_PATTERN = /^[A-Za-z0-9]+(?:[A-Za-z0-9.]*)-(?:Token|Account|KeyPair|SymmetricKey)-[A-Za-z0-9][A-Za-z0-9._-]*$/;

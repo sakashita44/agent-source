@@ -20,12 +20,12 @@
 - [CPython gh-134587: AppContainer で mkdtemp のディレクトリに書き込めない報告](https://github.com/python/cpython/issues/134587)
 - [openai/codex #19791: Codex の Windows サンドボックスで 0o700 の一時ディレクトリにアクセスできない報告](https://github.com/openai/codex/issues/19791)
 
-## Windows の Codex サンドボックスで mise の shim が版を解決できない
+## Windows の Codex サンドボックスで mise の shim がバージョンを解決できない
 
 一致条件:
 
 - Windows 上の Codex のサンドボックス内で実行している
-- mise の shim（`uv`、`node`、`npm`、`npx` など）が `mise ERROR No version is set for shim: <ツール>` で終了する。グローバル設定やプロジェクトの `mise.toml` に版を宣言していても発生する
+- mise の shim（`uv`、`node`、`npm`、`npx` など）が `mise ERROR No version is set for shim: <ツール>` で終了する。グローバル設定やプロジェクトの `mise.toml` にバージョンを宣言していても発生する
 
 対応:
 
