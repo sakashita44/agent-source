@@ -22,7 +22,7 @@
 | `engineering-principles` | 設計、実装、レビュー、技術的な提案で、解決の範囲、手段の選択、既存の構造との整合を判断する | 自動 |
 | `artifact-principles` | 情報と意図を、コード、テスト、コメント、Issue、文書、ADR のどこに配置するかを判断する | 自動 |
 | `writing-principles` | 文書、Issue、PR description、コメント、コミットメッセージなど、残る文章を執筆、修正、レビューする | 自動 |
-| `verification-principles` | 検証方法を選び、証拠を評価し、作業の完了を判定する | 自動 |
+| `verification-principles` | テストを設計し、検証方法を選び、証拠を評価し、作業の完了を判定する | 自動 |
 | `git-general` | Git の状態や履歴を参照し、ブランチ、コミット、PR、リリースを操作または提案する | 自動 |
 | `subagent` | サブエージェントへ作業を委譲する際に、委譲先、依頼文、結果の検証方法を決める | 自動 |
 | `stack-conventions` | 特定のプラットフォームを対象に開発する際に、UI ツールキット、言語、版などの方式を選ぶ | 自動 |
