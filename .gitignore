@@ -9,5 +9,5 @@ node_modules/
 .idea/
 old/
 
-# rulesync install が取得する第三者Skill
+# rulesync install が取得する外部リポジトリの Skill
 .rulesync/skills/.curated/

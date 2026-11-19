@@ -17,6 +17,13 @@
   - テスト設計の原則と陥りやすい形の是正（`verification-principles`）。実装を参照する前に仕様から契約を列挙し、仕様が定めていない期待値は実装の現状で補わず設計判断として扱う。未確定の期待値が残る疑いがある公開契約では、実装を渡さずに仕様と公開インターフェースのみを委譲先へ渡して契約と未確定箇所を列挙させる。自動テストと利用者による評価の分担、一時的な検証と継続的な CI の区別、テスト設計で陥りやすい 5 つの形と是正、非決定的な失敗を発生機序と決定的再現で検証する手順、成功やカバレッジと十分性の区別を定める
   - テスト設計時の参照導線（`verification-principles`、`implement`、`00-global.md`、`docs/skills.md`）。テスト設計の段階でも `verification-principles` が読み込まれるよう、`description`、`00-global.md` の適用条件、`implement` からの参照、`docs/skills.md` の用途を更新する
 
+### Changed
+
+- ユーザー向け文書と `AGENTS.md`（`README.md`、`docs/skills.md`、`docs/maintenance.md`、`docs/skill-audit.md`、`AGENTS.md`）
+  - 保守手順の分離と構成の再編（`README.md`、`docs/maintenance.md`、`AGENTS.md`）。`README.md` の保守手順（Rulesync の更新、外部リポジトリの Skill の更新、生成元から外した生成物の削除と棚卸し）を `docs/maintenance.md` へ切り出し、`README.md` を導入・適用・構成概要・保守導線に整理する。個人環境固有の前提（`mise`、`Truth DB`）を `README.md` から除き、PowerShell・hook の Node.js 要件・`permissions.jsonc` の Notion MCP 許可ルールなど実態と食い違っていた記述を訂正する
+  - Skill 一覧と点検手順の見直し（`docs/skills.md`、`docs/skill-audit.md`）。起動方法の区分を「自動 / 手動」へ改め、カテゴリを「判断の原則」と「作業別の Skill」へ再編し、`bitwarden-vault` の要約を圧縮する。点検手順に外部取得 Skill の判断区分、利用者とエージェントの役割境界、例外対応を補う
+- 配布物とリポジトリ内文書の用語統一（`.rulesync/`、`README.md`、`docs/`、`AGENTS.md`）。version の訳語「版」を「バージョン」、Bitwarden の「金庫」を公式表記の「保管庫」（`broker.mjs` の表示文言を含む）、`notion-workspace` の DB 呼称「Truth」を「運用規則 DB」へ統一する
+
 ## [1.3.0] - 2026-11-15
 
 ### Added
